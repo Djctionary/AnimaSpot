@@ -1,0 +1,199 @@
+<mujoco model="spot_scene">
+  <compiler angle="radian" autolimits="true" meshdir="meshes"/>
+
+  <option gravity="0 0 -9.81"/>
+
+  <statistic center="0 0 0.3" extent="1.5"/>
+
+  <default>
+    <default class="visual">
+      <geom type="mesh" contype="0" conaffinity="0" density="0" group="2"/>
+    </default>
+    <default class="foot">
+      <geom type="sphere" size="0.035" rgba="0.15 0.15 0.15 1" friction="0.8 0.02 0.01"/>
+    </default>
+  </default>
+
+  <asset>
+    <texture
+      name="groundplane_tex"
+      type="2d"
+      builtin="checker"
+      rgb1="0.28 0.32 0.36"
+      rgb2="0.18 0.22 0.26"
+      width="512"
+      height="512"/>
+    <material
+      name="groundplane"
+      texture="groundplane_tex"
+      texrepeat="5 5"
+      texuniform="true"
+      reflectance="0.15"/>
+
+    <material name="spot_yellow" rgba="0.96 0.76 0.12 1"/>
+    <material name="spot_dark" rgba="0.20 0.20 0.20 1"/>
+
+    <mesh name="body_mesh" file="body_visuals_mesh_0.obj"/>
+    <mesh name="fl_hip_mesh" file="fl_hip_visuals_mesh_0.obj"/>
+    <mesh name="fl_uleg_mesh" file="fl_uleg_visuals_mesh_0.obj"/>
+    <mesh name="fl_lleg_mesh" file="fl_lleg_visuals_mesh_0.obj"/>
+    <mesh name="fr_hip_mesh" file="fr_hip_visuals_mesh_0.obj"/>
+    <mesh name="fr_uleg_mesh" file="fr_uleg_visuals_mesh_0.obj"/>
+    <mesh name="fr_lleg_mesh" file="fr_lleg_visuals_mesh_0.obj"/>
+    <mesh name="hl_hip_mesh" file="hl_hip_visuals_mesh_0.obj"/>
+    <mesh name="hl_uleg_mesh" file="hl_uleg_visuals_mesh_0.obj"/>
+    <mesh name="hl_lleg_mesh" file="hl_lleg_visuals_mesh_0.obj"/>
+    <mesh name="hr_hip_mesh" file="hr_hip_visuals_mesh_0.obj"/>
+    <mesh name="hr_uleg_mesh" file="hr_uleg_visuals_mesh_0.obj"/>
+    <mesh name="hr_lleg_mesh" file="hr_lleg_visuals_mesh_0.obj"/>
+  </asset>
+
+  <worldbody>
+    <geom
+      name="floor"
+      size="0 0 0.01"
+      type="plane"
+      material="groundplane"
+      contype="1"
+      conaffinity="0"
+      priority="1"
+      friction="0.6"
+      condim="3"/>
+    <light diffuse=".5 .5 .5" pos="-3 -3 5" dir="3 3 -5" castshadow="true"/>
+
+    <body name="spot" pos="0 0 0.62">
+      <freejoint name="root"/>
+      <inertial pos="0 0 0" mass="17.5" diaginertia="0.09 1.08 1.11"/>
+      <geom class="visual" mesh="body_mesh" material="spot_yellow"/>
+      <geom type="box" size="0.425 0.1 0.07" rgba="0 0 0 0"/>
+
+      <body name="fl_hip" pos="0.29785 0.055 0">
+        <joint name="fl_hx" type="hinge" axis="1 0 0" range="-0.785398 0.785398"/>
+        <inertial
+          pos="-0.0158674 0.0085584 0.000009"
+          mass="1.1368834"
+          fullinertia="0.0012217 0.0015896 0.001729 -0.0001775 0.0000004 -0.0000005"/>
+        <geom class="visual" mesh="fl_hip_mesh" material="spot_dark"/>
+
+        <body name="fl_uleg" pos="0 0.110945 0">
+          <joint name="fl_hy" type="hinge" axis="0 1 0" range="-0.898845 2.295108"/>
+          <inertial
+            pos="0.0021444 -0.0111018 -0.078812"
+            mass="2.2562037"
+            fullinertia="0.026925 0.0258391 0.0031874 -0.0000878 0.0005487 0.0020715"/>
+          <geom class="visual" mesh="fl_uleg_mesh" material="spot_yellow"/>
+
+          <body name="fl_lleg" pos="0.025 0 -0.3205">
+            <joint name="fl_kn" type="hinge" axis="0 1 0" range="-2.7928999 -0.2471"/>
+            <inertial
+              pos="0.0059736 0 -0.1746643"
+              mass="0.33"
+              fullinertia="0.0070136 0.0070995 0.0001453 0 0.000066 0"/>
+            <geom class="visual" mesh="fl_lleg_mesh" material="spot_dark"/>
+
+            <body name="fl_foot" pos="0 0 -0.3365">
+              <inertial pos="0 0 0" mass="0.000001" diaginertia="0.001 0.001 0.001"/>
+              <geom class="foot"/>
+            </body>
+          </body>
+        </body>
+      </body>
+
+      <body name="fr_hip" pos="0.29785 -0.055 0">
+        <joint name="fr_hx" type="hinge" axis="1 0 0" range="-0.785398 0.785398"/>
+        <inertial
+          pos="-0.0158674 -0.0085584 0.000009"
+          mass="1.1368834"
+          fullinertia="0.0012217 0.0015896 0.001729 0.0001775 0.0000004 0.0000005"/>
+        <geom class="visual" mesh="fr_hip_mesh" material="spot_dark"/>
+
+        <body name="fr_uleg" pos="0 -0.110945 0">
+          <joint name="fr_hy" type="hinge" axis="0 1 0" range="-0.898845 2.295108"/>
+          <inertial
+            pos="0.0021444 0.0111018 -0.078812"
+            mass="2.2562037"
+            fullinertia="0.026925 0.0258391 0.0031874 0.0000878 0.0005487 -0.0020715"/>
+          <geom class="visual" mesh="fr_uleg_mesh" material="spot_yellow"/>
+
+          <body name="fr_lleg" pos="0.025 0 -0.3205">
+            <joint name="fr_kn" type="hinge" axis="0 1 0" range="-2.7928999 -0.2471"/>
+            <inertial
+              pos="0.0059736 0 -0.1746643"
+              mass="0.33"
+              fullinertia="0.0070136 0.0070995 0.0001453 0 0.000066 0"/>
+            <geom class="visual" mesh="fr_lleg_mesh" material="spot_dark"/>
+
+            <body name="fr_foot" pos="0 0 -0.3365">
+              <inertial pos="0 0 0" mass="0.000001" diaginertia="0.001 0.001 0.001"/>
+              <geom class="foot"/>
+            </body>
+          </body>
+        </body>
+      </body>
+
+      <body name="hl_hip" pos="-0.29785 0.055 0">
+        <joint name="hl_hx" type="hinge" axis="1 0 0" range="-0.785398 0.785398"/>
+        <inertial
+          pos="0.0158674 0.0085584 0.000009"
+          mass="1.1368834"
+          fullinertia="0.0012217 0.0015896 0.001729 0.0001775 -0.0000004 -0.0000005"/>
+        <geom class="visual" mesh="hl_hip_mesh" material="spot_dark"/>
+
+        <body name="hl_uleg" pos="0 0.110945 0">
+          <joint name="hl_hy" type="hinge" axis="0 1 0" range="-0.898845 2.295108"/>
+          <inertial
+            pos="0.0021444 -0.0111018 -0.078812"
+            mass="2.2562037"
+            fullinertia="0.026925 0.0258391 0.0031874 -0.0000878 0.0005487 0.0020715"/>
+          <geom class="visual" mesh="hl_uleg_mesh" material="spot_yellow"/>
+
+          <body name="hl_lleg" pos="0.025 0 -0.3205">
+            <joint name="hl_kn" type="hinge" axis="0 1 0" range="-2.7928999 -0.2471"/>
+            <inertial
+              pos="0.0059736 0 -0.1746643"
+              mass="0.33"
+              fullinertia="0.0070136 0.0070995 0.0001453 0 0.000066 0"/>
+            <geom class="visual" mesh="hl_lleg_mesh" material="spot_dark"/>
+
+            <body name="hl_foot" pos="0 0 -0.3365">
+              <inertial pos="0 0 0" mass="0.000001" diaginertia="0.001 0.001 0.001"/>
+              <geom class="foot"/>
+            </body>
+          </body>
+        </body>
+      </body>
+
+      <body name="hr_hip" pos="-0.29785 -0.055 0">
+        <joint name="hr_hx" type="hinge" axis="1 0 0" range="-0.785398 0.785398"/>
+        <inertial
+          pos="0.0158674 -0.0085584 0.000009"
+          mass="1.1368834"
+          fullinertia="0.0012217 0.0015896 0.001729 -0.0001775 -0.0000004 0.0000005"/>
+        <geom class="visual" mesh="hr_hip_mesh" material="spot_dark"/>
+
+        <body name="hr_uleg" pos="0 -0.110945 0">
+          <joint name="hr_hy" type="hinge" axis="0 1 0" range="-0.898845 2.295108"/>
+          <inertial
+            pos="0.0021444 0.0111018 -0.078812"
+            mass="2.2562037"
+            fullinertia="0.026925 0.0258391 0.0031874 0.0000878 0.0005487 -0.0020715"/>
+          <geom class="visual" mesh="hr_uleg_mesh" material="spot_yellow"/>
+
+          <body name="hr_lleg" pos="0.025 0 -0.3205">
+            <joint name="hr_kn" type="hinge" axis="0 1 0" range="-2.7928999 -0.2471"/>
+            <inertial
+              pos="0.0059736 0 -0.1746643"
+              mass="0.33"
+              fullinertia="0.0070136 0.0070995 0.0001453 0 0.000066 0"/>
+            <geom class="visual" mesh="hr_lleg_mesh" material="spot_dark"/>
+
+            <body name="hr_foot" pos="0 0 -0.3365">
+              <inertial pos="0 0 0" mass="0.000001" diaginertia="0.001 0.001 0.001"/>
+              <geom class="foot"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>
