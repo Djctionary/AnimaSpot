@@ -8,13 +8,19 @@ from matplotlib.animation import FuncAnimation
 
 from .config import BONE_I, BONE_J, HIP_ATTACHMENTS, LEG_ORDER, LEG_SIDE, L_LOWER, L_UPPER, HIP_X_OFFSET
 from .ik_solver import leg_keypoints
+from .skeleton import compute_body_frame
 
 
-def _spot_points_from_angles(spot_angles: np.ndarray) -> dict:
+def _spot_points_from_angles(
+    spot_angles: np.ndarray,
+    R: np.ndarray | None = None,
+    t: np.ndarray | None = None,
+) -> dict:
+    """Compute Spot leg keypoints, optionally transformed to world frame via R, t."""
     points = {}
     for i, leg in enumerate(LEG_ORDER):
         hx, hy, kn = spot_angles[3 * i : 3 * i + 3]
-        hip = HIP_ATTACHMENTS[leg]
+        hip = HIP_ATTACHMENTS[leg].copy()
         knee_rel, paw_rel = leg_keypoints(
             hx=hx,
             hy=hy,
@@ -24,10 +30,23 @@ def _spot_points_from_angles(spot_angles: np.ndarray) -> dict:
             L_lower=L_LOWER,
             side=LEG_SIDE[leg],
         )
+        hip_body = hip
+        knee_body = hip + knee_rel
+        paw_body = hip + paw_rel
+
+        if R is not None and t is not None:
+            hip_world = R @ hip_body + t
+            knee_world = R @ knee_body + t
+            paw_world = R @ paw_body + t
+        else:
+            hip_world = hip_body
+            knee_world = knee_body
+            paw_world = paw_body
+
         points[leg] = {
-            "hip": hip,
-            "knee": hip + knee_rel,
-            "paw": hip + paw_rel,
+            "hip": hip_world,
+            "knee": knee_world,
+            "paw": paw_world,
         }
     return points
 
@@ -44,7 +63,8 @@ def plot_frame(dog_pose: np.ndarray, spot_angles: np.ndarray, frame_idx: int) ->
     ax1.scatter(dog_pose[:, 0], dog_pose[:, 1], dog_pose[:, 2], s=10, color="tab:blue")
     ax1.set_title(f"Dog Pose (frame {frame_idx})")
 
-    spot = _spot_points_from_angles(spot_angles)
+    R, t = compute_body_frame(dog_pose)
+    spot = _spot_points_from_angles(spot_angles, R=R, t=t)
     for leg in LEG_ORDER:
         hip = spot[leg]["hip"]
         knee = spot[leg]["knee"]
@@ -52,7 +72,7 @@ def plot_frame(dog_pose: np.ndarray, spot_angles: np.ndarray, frame_idx: int) ->
         ax2.plot([hip[0], knee[0]], [hip[1], knee[1]], [hip[2], knee[2]], color="tab:orange", lw=2.0)
         ax2.plot([knee[0], paw[0]], [knee[1], paw[1]], [knee[2], paw[2]], color="tab:red", lw=2.0)
         ax2.scatter([hip[0], knee[0], paw[0]], [hip[1], knee[1], paw[1]], [hip[2], knee[2], paw[2]], s=20)
-    ax2.set_title("Spot FK Reconstruction")
+    ax2.set_title("Spot FK Reconstruction (world frame)")
 
     for ax in (ax1, ax2):
         ax.set_xlabel("x")
@@ -66,7 +86,8 @@ def plot_frame(dog_pose: np.ndarray, spot_angles: np.ndarray, frame_idx: int) ->
 def _compute_axis_bounds(dog_sequence: np.ndarray, spot_joint_sequence: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     all_points = [dog_sequence.reshape(-1, 3)]
     for f in range(spot_joint_sequence.shape[0]):
-        spot = _spot_points_from_angles(spot_joint_sequence[f])
+        R, t = compute_body_frame(dog_sequence[f])
+        spot = _spot_points_from_angles(spot_joint_sequence[f], R=R, t=t)
         leg_pts = []
         for leg in LEG_ORDER:
             leg_pts.extend([spot[leg]["hip"], spot[leg]["knee"], spot[leg]["paw"]])
@@ -121,7 +142,8 @@ def animate_sequence(
             ax1.plot([p1[0], p2[0]], [p1[1], p2[1]], [p1[2], p2[2]], color="tab:blue", lw=1.5)
         ax1.scatter(dog_pose[:, 0], dog_pose[:, 1], dog_pose[:, 2], s=10, color="tab:blue")
 
-        spot = _spot_points_from_angles(spot_angles)
+        R, t_body = compute_body_frame(dog_pose)
+        spot = _spot_points_from_angles(spot_angles, R=R, t=t_body)
         for leg in LEG_ORDER:
             hip = spot[leg]["hip"]
             knee = spot[leg]["knee"]
@@ -137,7 +159,7 @@ def animate_sequence(
             )
 
         _style_axis(ax1, f"Dog Pose (frame {frame_idx})", mins, maxs)
-        _style_axis(ax2, "Spot FK Reconstruction", mins, maxs)
+        _style_axis(ax2, "Spot FK Reconstruction (world frame)", mins, maxs)
 
     animation = FuncAnimation(
         fig,

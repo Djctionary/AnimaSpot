@@ -106,7 +106,10 @@ class RetargetConfig:
 
     fps: int = 24
     root_position: Tuple[float, float, float] = (0.0, 0.0, 0.5)
-    smooth_window: int = 7
-    smooth_polyorder: int = 3
-    quat_slerp_alpha: float = 0.35
-
+    # 1-Euro filter (Casiez et al. 2012) — adaptive low-pass.
+    one_euro_min_cutoff: float = 1.7
+    one_euro_beta: float = 0.01
+    one_euro_d_cutoff: float = 1.0
+    # Ground-contact body-height adjustment.
+    ground_contact: bool = False
+    ground_clearance: float = 0.035

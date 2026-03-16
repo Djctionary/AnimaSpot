@@ -56,7 +56,7 @@ def solve_leg_ik(
     # Remove abduction to recover sagittal target.
     c = np.cos(hx_raw)
     ss = np.sin(hx_raw)
-    x_sag = px
+    x_sag = -px  # Negate to match MuJoCo Y-axis rotation: positive hy = leg backward
     z_sag = -y_out * ss + pz * c
 
     # 2) Sagittal 2-link IK (Spot knee convention is negative bend).
@@ -91,7 +91,7 @@ def forward_kinematics(
 
     p_sag = np.array(
         [
-            L_upper * np.sin(hy) + L_lower * np.sin(hy + kn),
+            -(L_upper * np.sin(hy) + L_lower * np.sin(hy + kn)),
             hip_offset,
             -(L_upper * np.cos(hy) + L_lower * np.cos(hy + kn)),
         ],
@@ -117,7 +117,7 @@ def leg_keypoints(
     s = _side_sign(side)
     hx_raw = s * hx
 
-    knee_sag = np.array([L_upper * np.sin(hy), hip_offset, -L_upper * np.cos(hy)], dtype=np.float64)
+    knee_sag = np.array([-L_upper * np.sin(hy), hip_offset, -L_upper * np.cos(hy)], dtype=np.float64)
     knee_out = _rot_x(hx_raw) @ knee_sag
     knee = np.array([knee_out[0], s * knee_out[1], knee_out[2]], dtype=np.float64)
 

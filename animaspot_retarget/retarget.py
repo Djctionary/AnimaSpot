@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict
 
 import numpy as np
-from scipy.signal import savgol_filter
+from scipy.spatial.transform import Rotation
 
 from .config import (
     HIP_ATTACHMENTS,
@@ -26,16 +26,53 @@ from .skeleton import compute_body_frame, compute_dog_leg_lengths, load_sequence
 LOGGER = logging.getLogger(__name__)
 
 
-def _safe_savgol(data: np.ndarray, window: int, polyorder: int) -> np.ndarray:
-    n = data.shape[0]
-    if n < 3:
-        return data.copy()
-    window = min(window, n if n % 2 == 1 else n - 1)
-    if window < 3:
-        return data.copy()
-    polyorder = min(polyorder, window - 1)
-    return savgol_filter(data, window_length=window, polyorder=polyorder, axis=0, mode="interp")
+# ---------------------------------------------------------------------------
+# 1-Euro filter  (Casiez et al., CHI 2012)
+# ---------------------------------------------------------------------------
 
+def _one_euro_pass(data: np.ndarray, freq: float, min_cutoff: float, beta: float, d_cutoff: float) -> np.ndarray:
+    """Single causal pass of the 1-Euro filter on an (N, D) array."""
+    n = data.shape[0]
+    out = np.empty_like(data)
+    out[0] = data[0]
+    dx = np.zeros(data.shape[1], dtype=np.float64)
+
+    te = 1.0 / freq
+    tau_d = 1.0 / (2.0 * np.pi * d_cutoff)
+    alpha_d = 1.0 / (1.0 + tau_d / te)
+
+    for i in range(1, n):
+        raw_dx = (data[i] - out[i - 1]) * freq
+        dx = alpha_d * raw_dx + (1.0 - alpha_d) * dx
+        cutoff = min_cutoff + beta * np.abs(dx)
+        tau = 1.0 / (2.0 * np.pi * cutoff)
+        alpha = 1.0 / (1.0 + tau / te)
+        out[i] = alpha * data[i] + (1.0 - alpha) * out[i - 1]
+    return out
+
+
+def one_euro_filter(
+    data: np.ndarray,
+    freq: float,
+    min_cutoff: float = 1.7,
+    beta: float = 0.01,
+    d_cutoff: float = 1.0,
+) -> np.ndarray:
+    """Zero-phase 1-Euro filter (forward-backward) for an (N, D) array.
+
+    Forward-backward eliminates the phase lag inherent in causal filtering,
+    which is critical for offline motion-capture post-processing.
+    """
+    if data.shape[0] < 3:
+        return data.copy()
+    forward = _one_euro_pass(data, freq, min_cutoff, beta, d_cutoff)
+    backward = _one_euro_pass(forward[::-1], freq, min_cutoff, beta, d_cutoff)
+    return backward[::-1].copy()
+
+
+# ---------------------------------------------------------------------------
+# Quaternion helpers
+# ---------------------------------------------------------------------------
 
 def _normalize_quat(q: np.ndarray) -> np.ndarray:
     q = np.asarray(q, dtype=np.float64)
@@ -52,35 +89,39 @@ def _enforce_quat_continuity(quats: np.ndarray) -> np.ndarray:
     return out
 
 
-def _slerp_pair(q0: np.ndarray, q1: np.ndarray, t: float) -> np.ndarray:
-    q0 = q0 / np.linalg.norm(q0)
-    q1 = q1 / np.linalg.norm(q1)
-    dot = np.dot(q0, q1)
-    if dot < 0.0:
-        q1 = -q1
-        dot = -dot
-    dot = np.clip(dot, -1.0, 1.0)
-    if dot > 0.9995:
-        q = q0 + t * (q1 - q0)
-        return q / np.linalg.norm(q)
-    theta_0 = np.arccos(dot)
-    sin_theta_0 = np.sin(theta_0)
-    theta = theta_0 * t
-    s0 = np.sin(theta_0 - theta) / sin_theta_0
-    s1 = np.sin(theta) / sin_theta_0
-    return s0 * q0 + s1 * q1
-
-
-def smooth_quaternions_slerp(quats: np.ndarray, alpha: float) -> np.ndarray:
-    """Two-pass SLERP smoothing (forward then backward)."""
+def _smooth_quaternions(
+    quats: np.ndarray,
+    freq: float,
+    min_cutoff: float,
+    beta: float,
+    d_cutoff: float,
+) -> np.ndarray:
+    """Smooth an (N, 4) quaternion sequence via 1-Euro on components."""
     quats = _enforce_quat_continuity(_normalize_quat(quats))
-    out = quats.copy()
-    for i in range(1, out.shape[0]):
-        out[i] = _slerp_pair(out[i - 1], out[i], alpha)
-    for i in range(out.shape[0] - 2, -1, -1):
-        out[i] = _slerp_pair(out[i + 1], out[i], alpha)
-    return _normalize_quat(_enforce_quat_continuity(out))
+    smoothed = one_euro_filter(quats, freq, min_cutoff, beta, d_cutoff)
+    return _normalize_quat(smoothed)
 
+
+# ---------------------------------------------------------------------------
+# Rotation helper
+# ---------------------------------------------------------------------------
+
+def _rotation_between(v_from: np.ndarray, v_to: np.ndarray) -> np.ndarray:
+    """Minimum-angle rotation matrix that maps *v_from* onto *v_to* (Rodrigues)."""
+    a = v_from / np.linalg.norm(v_from)
+    b = v_to / np.linalg.norm(v_to)
+    v = np.cross(a, b)
+    s = np.linalg.norm(v)
+    c = np.dot(a, b)
+    if s < 1e-8:
+        return np.eye(3, dtype=np.float64)
+    vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]], dtype=np.float64)
+    return np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
+
+
+# ---------------------------------------------------------------------------
+# IK pipeline helpers
+# ---------------------------------------------------------------------------
 
 def compute_leg_scale_factors(sequence: np.ndarray) -> Dict[str, float]:
     dog_leg_lengths = compute_dog_leg_lengths(sequence)
@@ -136,6 +177,83 @@ def solve_frame_ik(pose: np.ndarray, scales: Dict[str, float]) -> tuple[np.ndarr
     return frame_angles, quat
 
 
+# ---------------------------------------------------------------------------
+# Paw body-frame positions (shared by ground contact + validation)
+# ---------------------------------------------------------------------------
+
+def _compute_paw_body_positions(joint_angles_frame: np.ndarray) -> np.ndarray:
+    """Return (4, 3) paw positions in body frame for one frame."""
+    paw_body = np.zeros((4, 3), dtype=np.float64)
+    for i, leg in enumerate(LEG_ORDER):
+        hx, hy, kn = joint_angles_frame[3 * i : 3 * i + 3]
+        paw_local = forward_kinematics(hx, hy, kn, HIP_X_OFFSET, L_UPPER, L_LOWER, LEG_SIDE[leg])
+        paw_body[i] = HIP_ATTACHMENTS[leg] + paw_local
+    return paw_body
+
+
+# ---------------------------------------------------------------------------
+# Ground-contact height + orientation adjustment
+# ---------------------------------------------------------------------------
+
+def _apply_ground_contact(
+    joint_angles: np.ndarray,
+    root_quat: np.ndarray,
+    root_pos: np.ndarray,
+    clearance: float,
+    freq: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Level the paw plane to horizontal and set body height.
+
+    For each frame:
+      1. FK → 4 paw positions in body frame.
+      2. Rotate to world via current root_quat.
+      3. Least-squares plane fit → surface normal.
+      4. Rodrigues minimum rotation to align the normal with world-Z.
+         This corrects pitch/roll while preserving yaw.
+      5. Re-compute paw world-Z, set root_pos.z so lowest paw = clearance.
+
+    Joint angles are never modified.
+    """
+    n_frames = joint_angles.shape[0]
+    up = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+
+    for f in range(n_frames):
+        paw_body = _compute_paw_body_positions(joint_angles[f])
+
+        R = Rotation.from_quat(root_quat[f]).as_matrix()
+        paw_rot = (R @ paw_body.T).T  # (4, 3) in world, before translation
+
+        # Least-squares plane fit: z = a*x + b*y + c
+        A = np.column_stack([paw_rot[:, 0], paw_rot[:, 1], np.ones(4)])
+        coeffs = np.linalg.lstsq(A, paw_rot[:, 2], rcond=None)[0]
+        a, b, _ = coeffs
+
+        # Plane normal (pointing upward from the paw plane).
+        n_world = np.array([-a, -b, 1.0], dtype=np.float64)
+        n_world /= np.linalg.norm(n_world)
+
+        # Minimum rotation to level the plane (pitch/roll only, yaw preserved).
+        R_corr = _rotation_between(n_world, up)
+        R_new = R_corr @ R
+        root_quat[f] = Rotation.from_matrix(R_new).as_quat()
+
+        # Height: lowest paw sits at *clearance*.
+        paw_rot_new = (R_new @ paw_body.T).T
+        min_z = np.min(paw_rot_new[:, 2])
+        root_pos[f, 2] = clearance - min_z
+
+    # Smooth the height trajectory to avoid per-frame jumps.
+    root_pos[:, 2:3] = one_euro_filter(root_pos[:, 2:3], freq, min_cutoff=0.8, beta=0.005)
+    # Ensure quaternion continuity after per-frame corrections.
+    root_quat = _normalize_quat(_enforce_quat_continuity(root_quat))
+
+    return root_pos, root_quat
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
 def validate_fk_rmse(joint_angles: np.ndarray, paw_targets_scaled: np.ndarray) -> float:
     """Compute FK-vs-target RMSE for diagnostics."""
     all_errors = []
@@ -174,6 +292,10 @@ def validate_link_length_invariance(joint_angles: np.ndarray, tol: float = 1e-4)
     return float(max_dev)
 
 
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
 def retarget_sequence(input_dir: str | Path, config: RetargetConfig) -> Dict[str, np.ndarray]:
     """Run full retargeting and return arrays for export."""
     sequence = load_sequence(input_dir)
@@ -197,14 +319,35 @@ def retarget_sequence(input_dir: str | Path, config: RetargetConfig) -> Dict[str
         for j, leg in enumerate(LEG_ORDER):
             paw_targets_scaled[i, j] = targets[leg] * scales[leg]
 
-    joint_angles = _safe_savgol(joint_angles, config.smooth_window, config.smooth_polyorder)
-    root_quat = smooth_quaternions_slerp(root_quat, config.quat_slerp_alpha)
+    # --- Smoothing (1-Euro filter) ---
+    freq = float(config.fps)
+    joint_angles = one_euro_filter(
+        joint_angles, freq,
+        min_cutoff=config.one_euro_min_cutoff,
+        beta=config.one_euro_beta,
+        d_cutoff=config.one_euro_d_cutoff,
+    )
+    root_quat = _smooth_quaternions(
+        root_quat, freq,
+        min_cutoff=config.one_euro_min_cutoff,
+        beta=config.one_euro_beta,
+        d_cutoff=config.one_euro_d_cutoff,
+    )
 
     # Clamp post-smoothing to enforce physical limits.
     for j, key in enumerate(["hx", "hy", "kn"] * 4):
         lo, hi = JOINT_LIMITS[key]
         joint_angles[:, j] = np.clip(joint_angles[:, j], lo, hi)
 
+    # --- Ground contact ---
+    if config.ground_contact:
+        root_pos, root_quat = _apply_ground_contact(
+            joint_angles, root_quat, root_pos,
+            config.ground_clearance, freq,
+        )
+        LOGGER.info("Ground contact applied (clearance=%.3f m).", config.ground_clearance)
+
+    # --- Validation ---
     rmse = validate_fk_rmse(joint_angles, paw_targets_scaled)
     LOGGER.info("FK target RMSE: %.4f m", rmse)
     if rmse > 0.02:
@@ -217,4 +360,3 @@ def retarget_sequence(input_dir: str | Path, config: RetargetConfig) -> Dict[str
         "root_pos": root_pos,
         "fps": np.array(config.fps, dtype=np.int32),
     }
-
