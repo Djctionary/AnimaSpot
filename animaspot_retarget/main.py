@@ -24,6 +24,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Retarget Animal3D pose sequence to Spot generalized coordinates.")
     parser.add_argument("--input_dir", type=str, required=True, help="Directory containing XXXX_3D.npz files.")
     parser.add_argument("--output", type=str, required=True, help="Output CSV path.")
+    parser.add_argument(
+        "--output_npz",
+        type=str,
+        default="",
+        help="Optional output NPZ path for the retargeted root pose and joint angles.",
+    )
     parser.add_argument("--behavior", type=str, default="behavior", help="Behavior name (for logging only).")
     parser.add_argument("--ground_contact", action="store_true", help="Adjust body height so paws touch the ground.")
     parser.add_argument("--visualize", action="store_true", help="Show frame and trajectory plots.")
@@ -42,6 +48,10 @@ def main() -> None:
     out_csv = Path(args.output)
     to_csv(result, out_csv)
     print(f"Wrote CSV: {out_csv}")
+    if args.output_npz:
+        out_npz = Path(args.output_npz)
+        to_numpy(result, out_npz)
+        print(f"Wrote NPZ: {out_npz}")
     print("Reminder for downstream preprocessing: use --input_fps 24")
 
     if args.visualize or args.animate:

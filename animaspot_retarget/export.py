@@ -9,6 +9,7 @@ import numpy as np
 
 def to_csv(retarget_result: dict, output_path: str | Path) -> None:
     output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     root_pos = retarget_result["root_pos"]
     root_quat = retarget_result["root_quat"]
     joint_angles = retarget_result["joint_angles"]
@@ -21,6 +22,7 @@ def to_csv(retarget_result: dict, output_path: str | Path) -> None:
 
 def to_numpy(retarget_result: dict, output_path: str | Path) -> None:
     output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         output_path,
         root_pos=retarget_result["root_pos"],

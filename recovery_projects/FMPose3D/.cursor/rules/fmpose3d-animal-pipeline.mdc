@@ -1,0 +1,59 @@
+---
+description: FMPose3D animal 3D pose estimation pipeline context and current optimization status
+globs: animals/demo/**/*.py, animals/demo/**/*.sh
+alwaysApply: false
+---
+
+# FMPose3D Animal Pipeline Context
+
+## Project Goal
+Estimate 3D animal poses from monocular video → retarget to robot dog.
+
+## Pipeline
+1. `vis_animals.sh` → calls `vis_animals.py` (2D detection via DeepLabCut SuperAnimal → 3D lifting via FMPose3D)
+2. `visualize_3d_poses.py` — post-hoc visualization with root centering + Savitzky-Golay smoothing
+
+## Key Architecture Facts
+- FMPose3D is a **Flow Matching** generative model: transports Gaussian noise → 3D pose via ODE (Euler sampler, `sample_steps=3`)
+- Model is **single-frame** (`frames=1`), no temporal receptive field
+- Each frame's 3D output depends on a **random noise seed** → source of inter-frame variance
+- Animal skeleton: **26 joints** (Animal3D format), root joint = 7 (tail_base)
+- Animal3D left/right joints: `[0,3,5,8,10,12,14,16,20,22]` / `[1,4,6,9,11,13,15,17,21,23]`
+- Animal ground truth is **pseudo-labels from SMAL model fitting**, not real mocap
+- Paper reference: arXiv:2602.05755 (Ti Wang, Xiaohang Yu, Mackenzie W. Mathis — EPFL)
+
+## Optimizations Applied
+1. **Multi-hypothesis generation** (N=10): generates 10 3D hypotheses per frame with independent noise seeds.
+2. **Camera-free RPEA aggregation** (paper Eq. 10-11): replaces simple averaging. Uses orthographic projection + Procrustes alignment as a proxy for 2D reprojection error (the paper's RPEA needs camera intrinsics; this camera-free variant preserves the relative ranking needed for top-K filtering + exponential weighting). CLI: `--aggregation rpea --topk 5 --rpea_alpha 50.0`. Fallback: `--aggregation mean`.
+3. **Bone length normalization** (video mode): computes median bone length per bone across all frames, then rescales each frame by `median_scale / frame_scale`. Directly addresses per-frame skeleton scaling fluctuation. CLI: `--bone_norm True`.
+4. **Global limb regularization**: computes single R_reg rotation from the mean pose across all frames (video mode), applies uniformly. Eliminates per-frame orientation drift.
+5. **Flip TTA**: implemented but **disabled** (`--test_augmentation False`). No visible improvement for animals; paper itself didn't use it on animal datasets (Suppl. Sec. B).
+6. Saved 3D poses (npz) are root-relative, suitable for retargeting (IK or position-based).
+
+## Paper-Aligned Design Decisions
+- Paper Table 3: animal results used N=1, no RPEA, no flip TTA. We exceed this by using N=10 + RPEA.
+- Paper Fig. 3: RPEA > Mean > JPMA at all hypothesis counts. Camera-free RPEA preserves this advantage.
+- Paper Suppl. Sec. B: S=3 ODE steps for all experiments (we match this).
+- Paper Suppl. Sec. E: S ∈ {3,4,5} all achieve near-optimal accuracy.
+
+## Current Remaining Issues
+- Mild **inter-frame jitter** persists (reduced by multi-hypothesis + RPEA but not fully eliminated)
+- Both remaining issues stem from the model's per-frame independent inference with no temporal consistency
+- Post-hoc Savitzky-Golay smoothing (`visualize_3d_poses.py`) further reduces jitter for visualization
+
+## Key Files
+- `animals/demo/vis_animals.py` — main inference script (2D→3D pipeline)
+- `animals/demo/vis_animals.sh` — shell launcher with hyperparams
+- `animals/demo/visualize_3d_poses.py` — 3D pose viewer/exporter (post-hoc smoothing)
+- `fmpose3d/aggregation_methods.py` — paper's original aggregation methods (RPEA with camera intrinsics)
+- `fmpose3d/common/config.py` — model defaults per model type
+- `fmpose3d/animals/common/arguments.py` — CLI argument definitions
+
+## Shell Script Parameters
+- `hypothesis_num=10` — number of hypotheses per frame
+- `sample_steps=3` — Euler ODE integration steps
+- `aggregation='rpea'` — aggregation strategy ('rpea' or 'mean')
+- `rpea_topk=5` — top-K filtering for RPEA
+- `rpea_alpha=50.0` — temperature for RPEA weighting
+- `bone_norm=True` — enforce median bone lengths across video frames
+- `--test_augmentation` — flip TTA toggle (default False for animals)
