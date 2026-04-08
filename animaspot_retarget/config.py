@@ -110,6 +110,9 @@ class RetargetConfig:
     one_euro_min_cutoff: float = 1.7
     one_euro_beta: float = 0.01
     one_euro_d_cutoff: float = 1.0
-    # Ground-contact body-height adjustment.
+    # Legacy flag kept for backward compatibility. Global pose correction now
+    # happens in an independent postprocess stage after retargeting.
     ground_contact: bool = False
     ground_clearance: float = 0.035
+    postprocess_global_pose: bool = True
+    postprocess_align_window: int = 5

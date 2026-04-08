@@ -114,7 +114,15 @@ def _rotation_between(v_from: np.ndarray, v_to: np.ndarray) -> np.ndarray:
     s = np.linalg.norm(v)
     c = np.dot(a, b)
     if s < 1e-8:
-        return np.eye(3, dtype=np.float64)
+        if c > 0.0:
+            return np.eye(3, dtype=np.float64)
+        # 180-degree rotation: choose any stable axis orthogonal to *a*.
+        axis = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+        if abs(a[0]) > 0.9:
+            axis = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        axis = axis - np.dot(axis, a) * a
+        axis /= np.linalg.norm(axis)
+        return 2.0 * np.outer(axis, axis) - np.eye(3, dtype=np.float64)
     vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]], dtype=np.float64)
     return np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
 
@@ -192,7 +200,7 @@ def _compute_paw_body_positions(joint_angles_frame: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Ground-contact height + orientation adjustment
+# Legacy ground-contact height + orientation adjustment
 # ---------------------------------------------------------------------------
 
 def _apply_ground_contact(
@@ -339,13 +347,11 @@ def retarget_sequence(input_dir: str | Path, config: RetargetConfig) -> Dict[str
         lo, hi = JOINT_LIMITS[key]
         joint_angles[:, j] = np.clip(joint_angles[:, j], lo, hi)
 
-    # --- Ground contact ---
     if config.ground_contact:
-        root_pos, root_quat = _apply_ground_contact(
-            joint_angles, root_quat, root_pos,
-            config.ground_clearance, freq,
+        LOGGER.warning(
+            "RetargetConfig.ground_contact is deprecated and ignored inside retarget_sequence. "
+            "Use the independent global pose postprocess instead."
         )
-        LOGGER.info("Ground contact applied (clearance=%.3f m).", config.ground_clearance)
 
     # --- Validation ---
     rmse = validate_fk_rmse(joint_angles, paw_targets_scaled)

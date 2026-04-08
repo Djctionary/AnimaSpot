@@ -154,31 +154,54 @@ python demo_video.py \
   --out_folder /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/intermediate/animer/AI_PlayBow
 ```
 
-At the moment, Step 2 directly consumes the `FMPose3D` `pose3D/*_3D.npz` output format.
+Step 2 now consumes the shared `pose3D/*_3D.npz` output format produced by both `FMPose3D` and `AniMer`.
 
 ## Step 2: Retarget to Spot
 
-Use the `FMPose3D` intermediate `pose3D` folder as the retargeting input:
+Use either intermediate `pose3D` folder as the retargeting input:
+
+- `pipeline_data/intermediate/fmpose3d/<video_name>/pose3D`
+- `pipeline_data/intermediate/animer/<video_name>/pose3D`
+
+If you omit `--output` and `--output_npz`, the retargeting CLI now saves automatically under:
+
+- `pipeline_data/final/fmpose3d/<video_name>/<video_name>_spot.csv`
+- `pipeline_data/final/fmpose3d/<video_name>/<video_name>_spot.npz`
+- `pipeline_data/final/animer/<video_name>/<video_name>_spot.csv`
+- `pipeline_data/final/animer/<video_name>/<video_name>_spot.npz`
 
 ```bash
 cd /home/vergil/MENU/Projects/AnimaSpot
 
 python3 -m animaspot_retarget.main \
   --input_dir ./pipeline_data/intermediate/fmpose3d/AI_PlayBow/pose3D \
-  --output ./pipeline_data/final/AI_PlayBow/AI_PlayBow_spot.csv \
-  --output_npz ./pipeline_data/final/AI_PlayBow/AI_PlayBow_spot.npz \
   --behavior AI_PlayBow \
   --animate
 ```
 
-To make all toes stay on the ground, add --ground_contact.
+Or retarget an `AniMer` result:
+
+```bash
+python3 -m animaspot_retarget.main \
+  --input_dir ./pipeline_data/intermediate/animer/AI_PlayBow/pose3D \
+  --behavior AI_PlayBow \
+  --animate
+```
+
+By default, retarget export now applies an independent global pose postprocess that:
+
+- rotates each frame so the four-foot support plane is as horizontal as possible
+- keeps the retargeted joint angles unchanged
+- shifts each frame vertically so the support plane stays close to ground level
+
+If you want the raw retarget root pose without this correction, add `--no_postprocess_global_pose`.
 
 ## Step 3: Visualize in MuJoCo
 
 ```bash
 python3 visualize_spot_csv_mujoco.py \
   --model /home/vergil/MENU/Projects/AnimaSpot/urdf/isaacsim_spot/spot_scene.xml \
-  --csv /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/final/AI_PlayBow/AI_PlayBow_spot.csv \
+  --csv /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/final/animer/AI_PlayBow/AI_PlayBow_spot.csv \
   --fps 24 \
   --repeat
 ```
@@ -187,6 +210,7 @@ python3 visualize_spot_csv_mujoco.py \
 
 - `pipeline_data/input/videos/` is now the only input-video location used by the integrated workflow.
 - `vis_animals.py` now supports `--output_root` so recovery outputs no longer have to stay under `animals/demo/predictions/`.
-- `animaspot_retarget.main` now supports `--output_npz` and creates parent directories automatically for both CSV and NPZ outputs.
+- Saved `FMPose3D` intermediate `pose3D` results are post-processed before export (multi-hypothesis aggregation, bone-length normalization, limb regularization), while saved `AniMer` `pose3D` results are written without extra temporal smoothing in `demo_video.py`.
+- `animaspot_retarget.main` now infers default CSV/NPZ save paths from the intermediate input folder, applies a sequence-wide global pose correction by default, and creates parent directories automatically.
 - Spot MuJoCo assets live under `urdf/isaacsim_spot/`.
 
