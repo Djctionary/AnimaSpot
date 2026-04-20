@@ -162,7 +162,16 @@ def predict_frame(
     mesh_rgb = (mesh_rgb[:, :, :3] * 255).astype(np.uint8)
 
     primary_pose3d = all_keypoints_3d[0] if all_keypoints_3d else None
-    return overlay_rgb, mesh_rgb, len(all_vertices), primary_pose3d
+    primary_vertices = all_vertices[0] if all_vertices else None
+    primary_cam_t = all_cam_t[0] if all_cam_t else None
+    return (
+        overlay_rgb,
+        mesh_rgb,
+        len(all_vertices),
+        primary_pose3d,
+        primary_vertices,
+        primary_cam_t,
+    )
 
 
 def alpha_blend(frame_rgb: np.ndarray, rgba: np.ndarray) -> np.ndarray:
@@ -191,6 +200,12 @@ def main():
     mesh_path = Path(args.out_folder) / f"{video_path.stem}_3d.mp4"
     pose3d_dir = Path(args.out_folder) / "pose3D"
     pose3d_dir.mkdir(parents=True, exist_ok=True)
+    mesh_dir = Path(args.out_folder) / "meshes"
+    mesh_dir.mkdir(parents=True, exist_ok=True)
+    smal_faces = model.smal.faces
+    if isinstance(smal_faces, torch.Tensor):
+        smal_faces = smal_faces.detach().cpu().numpy()
+    np.save(mesh_dir / "faces.npy", np.asarray(smal_faces, dtype=np.int32))
 
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -227,7 +242,14 @@ def main():
                 break
 
             frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-            overlay_rgb, mesh_rgb, num_animals, primary_pose3d = predict_frame(
+            (
+                overlay_rgb,
+                mesh_rgb,
+                num_animals,
+                primary_pose3d,
+                primary_vertices,
+                primary_cam_t,
+            ) = predict_frame(
                 frame_rgb,
                 detector,
                 model,
@@ -245,6 +267,11 @@ def main():
                     pose3d_dir / f"{frame_idx:04d}_3D.npz",
                     pose3d=primary_pose3d,
                 )
+                np.savez_compressed(
+                    mesh_dir / f"{frame_idx:04d}.npz",
+                    vertices=primary_vertices.astype(np.float32),
+                    cam_t=primary_cam_t.astype(np.float32),
+                )
 
             overlay_writer.write(cv2.cvtColor(overlay_rgb, cv2.COLOR_RGB2BGR))
             mesh_writer.write(cv2.cvtColor(mesh_rgb, cv2.COLOR_RGB2BGR))
@@ -261,6 +288,7 @@ def main():
     print(f"Saved overlay video to {overlay_path}")
     print(f"Saved raw 3D video to {mesh_path}")
     print(f"Saved raw 3D keypoints to {pose3d_dir}")
+    print(f"Saved per-frame SMAL meshes to {mesh_dir}")
 
 
 if __name__ == "__main__":

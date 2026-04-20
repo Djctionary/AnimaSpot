@@ -108,12 +108,12 @@ It also reads input videos from:
 Run it from `recovery_projects/FMPose3D/animals/demo/`, or call the Python entry point directly:
 
 ```bash
-cd /home/vergil/MENU/Projects/AnimaSpot/recovery_projects/FMPose3D/animals/demo
+cd recovery_projects/FMPose3D/animals/demo
 
 python vis_animals.py \
   --type video \
-  --path /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/input/videos/AI_PlayBow.mp4 \
-  --output_root /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/intermediate/fmpose3d \
+  --path ../../../../pipeline_data/input/videos/AI_PlayBow.mp4 \
+  --output_root ../../../../pipeline_data/intermediate/fmpose3d \
   --saved_model_path ../pre_trained_models/fmpose3d_animals/fmpose3d_animals_pretrained_weights.pth \
   --model_type fmpose3d_animals \
   --sample_steps 3 \
@@ -131,8 +131,8 @@ python vis_animals.py \
 
 The same pattern applies to:
 
-- `/home/vergil/MENU/Projects/AnimaSpot/pipeline_data/input/videos/AI_Greeting.mp4`
-- `/home/vergil/MENU/Projects/AnimaSpot/pipeline_data/input/videos/AI_SettleDown.mp4`
+- `pipeline_data/input/videos/AI_Greeting.mp4`
+- `pipeline_data/input/videos/AI_SettleDown.mp4`
 
 ### Step 1B: Recover Pose/Shape with AniMer
 
@@ -141,20 +141,33 @@ AniMer is an alternative recovery step. Save its outputs under:
 - `pipeline_data/intermediate/animer/<video_name>/`
 
 ```bash
-cd /home/vergil/MENU/Projects/AnimaSpot/recovery_projects/AniMer
+cd recovery_projects/AniMer
 
 python demo.py \
   --checkpoint data/AniMer/checkpoints/checkpoint.ckpt \
   --img_folder example_data \
-  --out_folder /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/intermediate/animer/demo_images
+  --out_folder ../../pipeline_data/intermediate/animer/demo_images
 
 python demo_video.py \
-  --video_path /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/input/videos/AI_PlayBow.mp4 \
+  --video_path ../../pipeline_data/input/videos/AI_PlayBow.mp4 \
   --checkpoint data/AniMer/checkpoints/checkpoint.ckpt \
-  --out_folder /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/intermediate/animer/AI_PlayBow
+  --out_folder ../../pipeline_data/intermediate/animer/AI_PlayBow
 ```
 
 Step 2 now consumes the shared `pose3D/*_3D.npz` output format produced by both `FMPose3D` and `AniMer`.
+
+## Step 1.5: Visualize AniMer Meshes (Optional)
+
+After running AniMer, you can preview the recovered meshes in a browser before retargeting.
+Run from the `AnimaSpot/` root:
+
+```bash
+python recovery_projects/AniMer/visualize_meshes.py \
+  --mesh_dir pipeline_data/intermediate/animer/AI_PlayBow/meshes \
+  --port 8080
+```
+
+Open `http://localhost:8080` in a browser to scrub through the mesh frames interactively.
 
 ## Step 2: Retarget to Spot
 
@@ -171,8 +184,6 @@ If you omit `--output` and `--output_npz`, the retargeting CLI now saves automat
 - `pipeline_data/final/animer/<video_name>/<video_name>_spot.npz`
 
 ```bash
-cd /home/vergil/MENU/Projects/AnimaSpot
-
 python3 -m animaspot_retarget.main \
   --input_dir ./pipeline_data/intermediate/fmpose3d/AI_PlayBow/pose3D \
   --behavior AI_PlayBow \
@@ -200,8 +211,8 @@ If you want the raw retarget root pose without this correction, add `--no_postpr
 
 ```bash
 python3 visualize_spot_csv_mujoco.py \
-  --model /home/vergil/MENU/Projects/AnimaSpot/urdf/isaacsim_spot/spot_scene.xml \
-  --csv /home/vergil/MENU/Projects/AnimaSpot/pipeline_data/final/animer/AI_PlayBow/AI_PlayBow_spot.csv \
+  --model urdf/isaacsim_spot/spot_scene.xml \
+  --csv pipeline_data/final/animer/AI_PlayBow/AI_PlayBow_spot.csv \
   --fps 24 \
   --repeat
 ```

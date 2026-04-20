@@ -1,5 +1,5 @@
 pipeline_data/
 *.log
-recovery_projects/AniMer/data/
+recovery_projects/AniMer/data
 *.pyc
 __pycache__/
