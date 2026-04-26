@@ -53,8 +53,11 @@ BONE_J = np.array(
 L_UPPER = 0.3405
 L_LOWER = 0.3405
 HIP_X_OFFSET = 0.0547
-BODY_HALF_LENGTH = 0.1945
-BODY_HALF_WIDTH = 0.055
+# BODY_HALF_LENGTH = 0.1945
+# BODY_HALF_WIDTH = 0.055
+BODY_HALF_LENGTH = 0.298
+BODY_HALF_WIDTH = 0.135
+BODY_LENGTH_OFFSET = 0.08
 
 JOINT_LIMITS = {
     "hx": (-0.7854, 0.7854),
@@ -85,18 +88,40 @@ LEG_SIDE = {
     "hr": "right",
 }
 
+# HIP_ATTACHMENTS = {
+#     "fl": np.array([BODY_HALF_LENGTH, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+#     "fr": np.array([BODY_HALF_LENGTH, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+#     "hl": np.array([-BODY_HALF_LENGTH, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+#     "hr": np.array([-BODY_HALF_LENGTH, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+# }
+
 HIP_ATTACHMENTS = {
-    "fl": np.array([BODY_HALF_LENGTH, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
-    "fr": np.array([BODY_HALF_LENGTH, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
-    "hl": np.array([-BODY_HALF_LENGTH, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
-    "hr": np.array([-BODY_HALF_LENGTH, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+    "fl": np.array([-BODY_LENGTH_OFFSET, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+    "fr": np.array([-BODY_LENGTH_OFFSET, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+    "hl": np.array([-BODY_LENGTH_OFFSET-2*BODY_HALF_LENGTH, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+    "hr": np.array([-BODY_LENGTH_OFFSET-2*BODY_HALF_LENGTH, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
 }
+
 
 LEG_JOINT_IDXS = {
     "fl": {"shoulder": 12, "thigh": 8, "knee": 14, "paw": 3},
     "fr": {"shoulder": 13, "thigh": 9, "knee": 15, "paw": 4},
     "hl": {"shoulder": 7, "thigh": 10, "knee": 16, "paw": 5},
     "hr": {"shoulder": 7, "thigh": 11, "knee": 17, "paw": 6},
+}
+
+# End-effector joint used for retarget target mapping and IK. Front legs use
+# the recovered knee as the target; hind legs still use the recovered paw.
+LEG_TARGET_JOINT_NAME = {
+    "fl": "knee",
+    "fr": "knee",
+    "hl": "paw",
+    "hr": "paw",
+}
+
+LEG_TARGET_JOINT_IDXS = {
+    leg: LEG_JOINT_IDXS[leg][joint_name]
+    for leg, joint_name in LEG_TARGET_JOINT_NAME.items()
 }
 
 

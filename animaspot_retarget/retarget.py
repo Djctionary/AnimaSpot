@@ -13,9 +13,9 @@ from .config import (
     HIP_ATTACHMENTS,
     HIP_X_OFFSET,
     JOINT_LIMITS,
-    LEG_JOINT_IDXS,
     LEG_ORDER,
     LEG_SIDE,
+    LEG_TARGET_JOINT_IDXS,
     L_LOWER,
     L_UPPER,
     RetargetConfig,
@@ -147,10 +147,10 @@ def compute_leg_scale_factors(sequence: np.ndarray) -> Dict[str, float]:
 def compute_paw_targets_body_frame(pose: np.ndarray, R: np.ndarray, t: np.ndarray) -> Dict[str, np.ndarray]:
     targets = {}
     for leg in LEG_ORDER:
-        paw_idx = LEG_JOINT_IDXS[leg]["paw"]
-        paw_world = pose[paw_idx]
-        paw_body = R.T @ (paw_world - t)
-        targets[leg] = paw_body - HIP_ATTACHMENTS[leg]
+        target_idx = LEG_TARGET_JOINT_IDXS[leg]
+        target_world = pose[target_idx]
+        target_body = R.T @ (target_world - t)
+        targets[leg] = target_body - HIP_ATTACHMENTS[leg]
     return targets
 
 

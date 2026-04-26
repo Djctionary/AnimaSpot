@@ -7,19 +7,21 @@ import logging
 from pathlib import Path
 
 try:
-    from .config import RetargetConfig, SPOT_JOINT_NAMES
+    from .config import RetargetConfig
+    from .debug_stages import default_debug_path, save_debug_stages
     from .export import to_csv, to_numpy
     from .postprocess import apply_global_pose_postprocess
     from .retarget import retarget_sequence
     from .skeleton import load_sequence
-    from .visualize import animate_sequence, plot_frame, plot_joint_trajectories
+    from .visualize import animate_sequence
 except ImportError:  # Support direct script execution: python main.py ...
-    from animaspot_retarget.config import RetargetConfig, SPOT_JOINT_NAMES
+    from animaspot_retarget.config import RetargetConfig
+    from animaspot_retarget.debug_stages import default_debug_path, save_debug_stages
     from animaspot_retarget.export import to_csv, to_numpy
     from animaspot_retarget.postprocess import apply_global_pose_postprocess
     from animaspot_retarget.retarget import retarget_sequence
     from animaspot_retarget.skeleton import load_sequence
-    from animaspot_retarget.visualize import animate_sequence, plot_frame, plot_joint_trajectories
+    from animaspot_retarget.visualize import animate_sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -81,7 +83,20 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Deprecated alias kept for compatibility. Global pose postprocessing is now the preferred behavior.",
     )
-    parser.add_argument("--visualize", action="store_true", help="Show frame and trajectory plots.")
+    parser.add_argument("--visualize", action="store_true", help="Save debug stages and open the Viser stage viewer.")
+    parser.add_argument("--visualize_host", type=str, default="127.0.0.1", help="Host for the Viser stage viewer.")
+    parser.add_argument("--visualize_port", type=int, default=8080, help="Port for the Viser stage viewer.")
+    parser.add_argument(
+        "--visualize_apply_cam_t",
+        action="store_true",
+        help="Apply AniMer mesh cam_t translations in the Viser stage viewer.",
+    )
+    parser.add_argument(
+        "--visualize_rotate_x_deg",
+        type=float,
+        default=-90.0,
+        help="Display-only X-axis rotation for Stage 1/2 in the Viser viewer. Does not modify saved data.",
+    )
     parser.add_argument("--animate", action="store_true", help="Play full 3D animation over all frames.")
     parser.add_argument("--log_level", type=str, default="INFO", help="Python logging level.")
     return parser.parse_args()
@@ -144,16 +159,25 @@ def main() -> None:
     print(f"Wrote NPZ: {out_npz}")
     print("Reminder for downstream preprocessing: use --input_fps 24")
 
-    if args.visualize or args.animate:
-        sequence = load_sequence(input_dir)
-    else:
-        sequence = None
-
     if args.visualize:
-        mid = len(sequence) // 2
-        plot_frame(sequence[mid], result["joint_angles"][mid], mid)
-        plot_joint_trajectories(result["joint_angles"], SPOT_JOINT_NAMES)
+        debug_path = default_debug_path(out_npz)
+        save_debug_stages(input_dir, debug_path, cfg)
+        print(f"Wrote debug stages: {debug_path}")
+        try:
+            from .stage_viewer import run_viewer
+        except ImportError:  # Support direct script execution: python main.py ...
+            from animaspot_retarget.stage_viewer import run_viewer
+
+        run_viewer(
+            debug_npz=debug_path,
+            host=args.visualize_host,
+            port=args.visualize_port,
+            apply_cam_t=args.visualize_apply_cam_t,
+            rotate_x_deg=args.visualize_rotate_x_deg,
+        )
+
     if args.animate:
+        sequence = load_sequence(input_dir)
         animate_sequence(sequence, result["joint_angles"], fps=cfg.fps, repeat=True)
 
 

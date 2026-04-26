@@ -8,7 +8,7 @@ from typing import Dict, Tuple
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from .config import ANIMAL3D_NUM_JOINTS, LEG_JOINT_IDXS
+from .config import ANIMAL3D_NUM_JOINTS, LEG_JOINT_IDXS, LEG_TARGET_JOINT_NAME
 
 
 def _normalize(v: np.ndarray, eps: float = 1e-8) -> np.ndarray:
@@ -55,17 +55,20 @@ def compute_body_frame(pose: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def compute_dog_leg_lengths(sequence: np.ndarray) -> Dict[str, float]:
-    """Average shoulder->thigh->knee->paw chain length per leg across frames."""
+    """Average source leg chain length up to the configured IK target joint."""
     lengths: Dict[str, float] = {}
     for leg, idxs in LEG_JOINT_IDXS.items():
         shoulder = sequence[:, idxs["shoulder"], :]
         thigh = sequence[:, idxs["thigh"], :]
         knee = sequence[:, idxs["knee"], :]
-        paw = sequence[:, idxs["paw"], :]
         l1 = np.linalg.norm(shoulder - thigh, axis=1)
         l2 = np.linalg.norm(thigh - knee, axis=1)
-        l3 = np.linalg.norm(knee - paw, axis=1)
-        lengths[leg] = float(np.mean(l1 + l2 + l3))
+        if LEG_TARGET_JOINT_NAME[leg] == "knee":
+            lengths[leg] = float(np.mean(l1 + l2))
+        else:
+            paw = sequence[:, idxs["paw"], :]
+            l3 = np.linalg.norm(knee - paw, axis=1)
+            lengths[leg] = float(np.mean(l1 + l2 + l3))
     return lengths
 
 
