@@ -160,6 +160,12 @@ def _format_diagnostics(debug: dict[str, np.ndarray], frame_idx: int, stage: str
     if stage == STAGE_OPTIONS[4] and "stage5_target_errors" in debug:
         errors = debug["stage5_target_errors"][frame_idx]
         lines.append("IK target error: " + ", ".join(f"{float(err):.3f}m" for err in errors))
+        if "hip_x_offset" in debug and "body_half_width" in debug:
+            lines.append(
+                "stage5 torso points: 4 mounts + 4 HY joints "
+                f"(body_half_width={float(debug['body_half_width']):.3f}m, "
+                f"hip_x_offset={float(debug['hip_x_offset']):.3f}m)"
+            )
     if stage == STAGE_OPTIONS[5] and "stage6_target_errors" in debug:
         errors = debug["stage6_target_errors"][frame_idx]
         lines.append("smoothed target error: " + ", ".join(f"{float(err):.3f}m" for err in errors))

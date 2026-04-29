@@ -26,6 +26,14 @@ from .skeleton import compute_body_frame, compute_dog_leg_lengths, load_sequence
 LOGGER = logging.getLogger(__name__)
 
 
+def _apply_joint_test_overrides(joint_angles: np.ndarray, config: RetargetConfig) -> np.ndarray:
+    """Apply optional test-only joint overrides in-place."""
+    if config.fix_hx_zero:
+        joint_angles[..., [0, 3, 6, 9]] = 0.0
+    return joint_angles
+
+
+
 # ---------------------------------------------------------------------------
 # 1-Euro filter  (Casiez et al., CHI 2012)
 # ---------------------------------------------------------------------------
@@ -327,6 +335,8 @@ def retarget_sequence(input_dir: str | Path, config: RetargetConfig) -> Dict[str
         for j, leg in enumerate(LEG_ORDER):
             paw_targets_scaled[i, j] = targets[leg] * scales[leg]
 
+    _apply_joint_test_overrides(joint_angles, config)
+
     # --- Smoothing (1-Euro filter) ---
     freq = float(config.fps)
     joint_angles = one_euro_filter(
@@ -346,6 +356,8 @@ def retarget_sequence(input_dir: str | Path, config: RetargetConfig) -> Dict[str
     for j, key in enumerate(["hx", "hy", "kn"] * 4):
         lo, hi = JOINT_LIMITS[key]
         joint_angles[:, j] = np.clip(joint_angles[:, j], lo, hi)
+
+    _apply_joint_test_overrides(joint_angles, config)
 
     if config.ground_contact:
         LOGGER.warning(

@@ -11,6 +11,8 @@ from scipy.spatial.transform import Rotation
 from .config import (
     BONE_I,
     BONE_J,
+    BODY_HALF_LENGTH,
+    BODY_HALF_WIDTH,
     HIP_ATTACHMENTS,
     HIP_X_OFFSET,
     JOINT_LIMITS,
@@ -27,6 +29,7 @@ from .config import (
 from .ik_solver import forward_kinematics, leg_keypoints, solve_leg_ik
 from .postprocess import apply_global_pose_postprocess
 from .retarget import (
+    _apply_joint_test_overrides,
     _normalize_quat,
     _smooth_quaternions,
     compute_leg_scale_factors,
@@ -38,20 +41,20 @@ from .skeleton import compute_body_frame, load_sequence, rotation_matrix_to_quat
 
 SPOT_STAGE_POINT_NAMES = np.array(
     [
-        "fl_hip",
-        "fr_hip",
-        "hl_hip",
-        "hr_hip",
-        "fl_thigh",
+        "fl_mount",
+        "fr_mount",
+        "hl_mount",
+        "hr_mount",
+        "fl_hy",
         "fl_knee",
         "fl_paw",
-        "fr_thigh",
+        "fr_hy",
         "fr_knee",
         "fr_paw",
-        "hl_thigh",
+        "hl_hy",
         "hl_knee",
         "hl_paw",
-        "hr_thigh",
+        "hr_hy",
         "hr_knee",
         "hr_paw",
     ],
@@ -219,6 +222,7 @@ def compute_debug_stages(input_dir: str | Path, config: RetargetConfig) -> dict[
                 joint_limits=JOINT_LIMITS,
                 side=LEG_SIDE[leg],
             )
+        _apply_joint_test_overrides(frame_angles, config)
         raw_joint_angles[frame_idx] = frame_angles
 
     stage5_ik_skeleton = _spot_skeleton_sequence_from_angles(raw_joint_angles)
@@ -233,6 +237,7 @@ def compute_debug_stages(input_dir: str | Path, config: RetargetConfig) -> dict[
     for joint_idx, key in enumerate(["hx", "hy", "kn"] * 4):
         lo, hi = JOINT_LIMITS[key]
         smoothed_joint_angles[:, joint_idx] = np.clip(smoothed_joint_angles[:, joint_idx], lo, hi)
+    _apply_joint_test_overrides(smoothed_joint_angles, config)
     root_quat_stage6 = _smooth_quaternions(
         raw_root_quat,
         freq,
@@ -273,6 +278,9 @@ def compute_debug_stages(input_dir: str | Path, config: RetargetConfig) -> dict[
         "leg_target_joint_names": np.array([LEG_TARGET_JOINT_NAME[leg] for leg in LEG_ORDER], dtype="<U8"),
         "leg_target_joint_indices": np.array([LEG_TARGET_JOINT_IDXS[leg] for leg in LEG_ORDER], dtype=np.int32),
         "spot_joint_names": np.array(SPOT_JOINT_NAMES, dtype="<U8"),
+        "body_half_length": np.array(BODY_HALF_LENGTH, dtype=np.float64),
+        "body_half_width": np.array(BODY_HALF_WIDTH, dtype=np.float64),
+        "hip_x_offset": np.array(HIP_X_OFFSET, dtype=np.float64),
         "scale_factors": _scales_to_array(scales),
         "stage1_animal3d": sequence,
         "stage2_body_origins": body_origins,

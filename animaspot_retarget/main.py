@@ -98,6 +98,11 @@ def parse_args() -> argparse.Namespace:
         help="Display-only X-axis rotation for Stage 1/2 in the Viser viewer. Does not modify saved data.",
     )
     parser.add_argument("--animate", action="store_true", help="Play full 3D animation over all frames.")
+    parser.add_argument(
+        "--fix_hx_zero",
+        action="store_true",
+        help="Force the front-left hx joint (fl_hx) to remain 0.0 radians for quick testing.",
+    )
     parser.add_argument("--log_level", type=str, default="INFO", help="Python logging level.")
     return parser.parse_args()
 
@@ -143,6 +148,7 @@ def main() -> None:
         ground_clearance=args.ground_clearance,
         postprocess_global_pose=args.postprocess_global_pose,
         postprocess_align_window=args.align_window,
+        fix_hx_zero=args.fix_hx_zero,
     )
     if args.ground_contact:
         logging.warning(

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Tuple
+from xml.etree import ElementTree as ET
 
 import numpy as np
 
@@ -49,14 +51,59 @@ BONE_J = np.array(
 )
 
 
+def _load_spot_urdf_geometry() -> dict[str, float]:
+    """Load key Spot dimensions from the checked-in URDF when available."""
+    fallback = {
+        "body_half_length": 0.29785,
+        "body_half_width": 0.055,
+        "hip_x_offset": 0.110945,
+    }
+
+    urdf_path = Path(__file__).resolve().parent.parent / "urdf" / "isaacsim_spot" / "spot.urdf"
+    if not urdf_path.exists():
+        return fallback
+
+    try:
+        root = ET.parse(urdf_path).getroot()
+    except ET.ParseError:
+        return fallback
+
+    joints: dict[str, np.ndarray] = {}
+    for joint in root.findall("joint"):
+        name = joint.get("name")
+        origin = joint.find("origin")
+        if name is None or origin is None:
+            continue
+        xyz_text = origin.get("xyz")
+        if xyz_text is None:
+            continue
+        try:
+            joints[name] = np.fromstring(xyz_text, sep=" ", dtype=np.float64)
+        except ValueError:
+            continue
+
+    fl_hx = joints.get("fl_hx")
+    hl_hx = joints.get("hl_hx")
+    fl_hy = joints.get("fl_hy")
+    if fl_hx is None or hl_hx is None or fl_hy is None:
+        return fallback
+
+    return {
+        "body_half_length": 0.5 * abs(float(fl_hx[0] - hl_hx[0])),
+        "body_half_width": abs(float(fl_hx[1])),
+        "hip_x_offset": abs(float(fl_hy[1])),
+    }
+
+
+_SPOT_URDF_GEOMETRY = _load_spot_urdf_geometry()
+
+
 # Spot kinematics (meters / radians)
 L_UPPER = 0.3405
 L_LOWER = 0.3405
-HIP_X_OFFSET = 0.0547
-# BODY_HALF_LENGTH = 0.1945
-# BODY_HALF_WIDTH = 0.055
-BODY_HALF_LENGTH = 0.298
-BODY_HALF_WIDTH = 0.135
+HIP_X_OFFSET = _SPOT_URDF_GEOMETRY["hip_x_offset"]
+BODY_HALF_LENGTH = _SPOT_URDF_GEOMETRY["body_half_length"]
+BODY_HALF_WIDTH = _SPOT_URDF_GEOMETRY["body_half_width"]
 BODY_LENGTH_OFFSET = 0.08
 
 JOINT_LIMITS = {
@@ -98,8 +145,8 @@ LEG_SIDE = {
 HIP_ATTACHMENTS = {
     "fl": np.array([-BODY_LENGTH_OFFSET, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
     "fr": np.array([-BODY_LENGTH_OFFSET, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
-    "hl": np.array([-BODY_LENGTH_OFFSET-2*BODY_HALF_LENGTH, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
-    "hr": np.array([-BODY_LENGTH_OFFSET-2*BODY_HALF_LENGTH, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+    "hl": np.array([-BODY_LENGTH_OFFSET - 2 * BODY_HALF_LENGTH, BODY_HALF_WIDTH, 0.0], dtype=np.float64),
+    "hr": np.array([-BODY_LENGTH_OFFSET - 2 * BODY_HALF_LENGTH, -BODY_HALF_WIDTH, 0.0], dtype=np.float64),
 }
 
 
@@ -141,3 +188,4 @@ class RetargetConfig:
     ground_clearance: float = 0.035
     postprocess_global_pose: bool = True
     postprocess_align_window: int = 5
+    fix_hx_zero: bool = False

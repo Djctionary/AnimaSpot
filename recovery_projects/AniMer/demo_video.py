@@ -20,6 +20,7 @@ from amr.utils.renderer import Renderer, cam_crop_to_full
 LIGHT_BLUE = (0.65098039, 0.74117647, 0.85882353)
 ANIMAL_CLASS_IDS = {15, 16, 17, 18, 19, 21, 22}
 DEFAULT_VIDEO_PATH = Path(__file__).resolve().parents[2] / "pipeline_data/input/videos/AI_PlayBow.mp4"
+DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parents[2] / "pipeline_data/intermediate/animer"
 
 
 def parse_args():
@@ -39,8 +40,8 @@ def parse_args():
     parser.add_argument(
         "--out_folder",
         type=str,
-        default="demo_video_out",
-        help="Output folder to save rendered videos",
+        default="",
+        help="Output folder to save rendered videos and intermediate outputs. Defaults to pipeline_data/intermediate/animer/<video_name>/",
     )
     parser.add_argument(
         "--batch_size",
@@ -67,6 +68,12 @@ def parse_args():
         help="Optional frame limit for debugging",
     )
     return parser.parse_args()
+
+
+def resolve_output_dir(video_path: Path, out_folder: str) -> Path:
+    if out_folder:
+        return Path(out_folder)
+    return DEFAULT_OUTPUT_ROOT / video_path.stem
 
 
 def build_detector(score_thresh: float):
@@ -195,12 +202,13 @@ def main():
     if not video_path.exists():
         raise FileNotFoundError(f"Video not found: {video_path}")
 
-    os.makedirs(args.out_folder, exist_ok=True)
-    overlay_path = Path(args.out_folder) / f"{video_path.stem}_smal.mp4"
-    mesh_path = Path(args.out_folder) / f"{video_path.stem}_3d.mp4"
-    pose3d_dir = Path(args.out_folder) / "pose3D"
+    out_dir = resolve_output_dir(video_path, args.out_folder)
+    os.makedirs(out_dir, exist_ok=True)
+    overlay_path = out_dir / f"{video_path.stem}_smal.mp4"
+    mesh_path = out_dir / f"{video_path.stem}_3d.mp4"
+    pose3d_dir = out_dir / "pose3D"
     pose3d_dir.mkdir(parents=True, exist_ok=True)
-    mesh_dir = Path(args.out_folder) / "meshes"
+    mesh_dir = out_dir / "meshes"
     mesh_dir.mkdir(parents=True, exist_ok=True)
     smal_faces = model.smal.faces
     if isinstance(smal_faces, torch.Tensor):

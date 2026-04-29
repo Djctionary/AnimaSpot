@@ -150,8 +150,7 @@ python demo.py \
 
 python demo_video.py \
   --video_path ../../pipeline_data/input/videos/AI_PlayBow.mp4 \
-  --checkpoint data/AniMer/checkpoints/checkpoint.ckpt \
-  --out_folder ../../pipeline_data/intermediate/animer/AI_PlayBow
+  --checkpoint data/AniMer/checkpoints/checkpoint.ckpt
 ```
 
 Step 2 now consumes the shared `pose3D/*_3D.npz` output format produced by both `FMPose3D` and `AniMer`.
@@ -187,7 +186,7 @@ If you omit `--output` and `--output_npz`, the retargeting CLI now saves automat
 python3 -m animaspot_retarget.main \
   --input_dir ./pipeline_data/intermediate/fmpose3d/AI_PlayBow/pose3D \
   --behavior AI_PlayBow \
-  --animate
+  --visualize
 ```
 
 Or retarget an `AniMer` result:
@@ -196,7 +195,7 @@ Or retarget an `AniMer` result:
 python3 -m animaspot_retarget.main \
   --input_dir ./pipeline_data/intermediate/animer/AI_PlayBow/pose3D \
   --behavior AI_PlayBow \
-  --animate
+  --visualize
 ```
 
 By default, retarget export now applies an independent global pose postprocess that:
@@ -224,4 +223,3 @@ python3 visualize_spot_csv_mujoco.py \
 - Saved `FMPose3D` intermediate `pose3D` results are post-processed before export (multi-hypothesis aggregation, bone-length normalization, limb regularization), while saved `AniMer` `pose3D` results are written without extra temporal smoothing in `demo_video.py`.
 - `animaspot_retarget.main` now infers default CSV/NPZ save paths from the intermediate input folder, applies a sequence-wide global pose correction by default, and creates parent directories automatically.
 - Spot MuJoCo assets live under `urdf/isaacsim_spot/`.
-
