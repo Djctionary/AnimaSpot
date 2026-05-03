@@ -157,11 +157,10 @@ LEG_JOINT_IDXS = {
     "hr": {"shoulder": 7, "thigh": 11, "knee": 17, "paw": 6},
 }
 
-# End-effector joint used for retarget target mapping and IK. Front legs use
-# the recovered knee as the target; hind legs still use the recovered paw.
+# End-effector joint used for retarget target mapping and IK.
 LEG_TARGET_JOINT_NAME = {
-    "fl": "knee",
-    "fr": "knee",
+    "fl": "paw",
+    "fr": "paw",
     "hl": "paw",
     "hr": "paw",
 }
@@ -189,3 +188,15 @@ class RetargetConfig:
     postprocess_global_pose: bool = True
     postprocess_align_window: int = 5
     fix_hx_zero: bool = False
+    # TrajectoryIK objective weights. Smoothness is one conceptual term with
+    # velocity and acceleration subcomponents.
+    trajectory_w_track: float = 1.0
+    trajectory_w_smooth: float = 0.05
+    trajectory_smooth_velocity_weight: float = 0.2
+    trajectory_smooth_acceleration_weight: float = 1.0
+    trajectory_w_ground: float = 5.0
+    trajectory_w_stable: float = 0.02
+    trajectory_ground_level: float = 0.0
+    trajectory_maxiter: int = 80
+    trajectory_ftol: float = 1e-6
+    trajectory_stable_joint_indices: Tuple[int, ...] = (0, 3, 6, 9)

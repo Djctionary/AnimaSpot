@@ -1,4 +1,4 @@
-"""Viser viewer for saved AnimaSpot retargeting debug stages."""
+"""Viser viewer for saved AnimaSpot retargeting stage artifacts."""
 
 from __future__ import annotations
 
@@ -19,28 +19,30 @@ except ModuleNotFoundError as exc:
 
 
 STAGE_OPTIONS = [
-    "Stage 1: AniMer mesh + Animal3D skeleton",
-    "Stage 2: body frame axes",
-    "Stage 3: Spot body/hip frame skeleton",
-    "Stage 4: leg-length scaled skeleton",
-    "Stage 5: IK result skeleton",
-    "Stage 6: smoothed skeleton",
-    "Stage 7: ground postprocess skeleton",
+    "RecoveredPose",
+    "BodyTransformed",
+    "LegScaled",
+    "Retargeted_AnalyticalIK",
+    "Smoothed_AnalyticalIK",
+    "Ground_AnalyticalIK",
+    "Retargeted_TrajectoryIK",
 ]
 
 _STAGE_ARRAYS = {
-    STAGE_OPTIONS[2]: "stage3_body_skeleton",
-    STAGE_OPTIONS[3]: "stage4_scaled_skeleton",
-    STAGE_OPTIONS[4]: "stage5_ik_skeleton",
-    STAGE_OPTIONS[5]: "stage6_smoothed_skeleton",
-    STAGE_OPTIONS[6]: "stage7_postprocessed_skeleton",
+    "BodyTransformed": "stage3_body_skeleton",
+    "LegScaled": "stage4_scaled_skeleton",
+    "Retargeted_AnalyticalIK": "stage5_ik_skeleton",
+    "Retargeted_TrajectoryIK": "stage5_ik_skeleton",
+    "Smoothed_AnalyticalIK": "stage6_smoothed_skeleton",
+    "Ground_AnalyticalIK": "stage7_postprocessed_skeleton",
 }
 
 _PREVIOUS_STAGE_ARRAYS = {
-    STAGE_OPTIONS[3]: "stage3_body_skeleton",
-    STAGE_OPTIONS[4]: "stage4_scaled_skeleton",
-    STAGE_OPTIONS[5]: "stage5_ik_skeleton",
-    STAGE_OPTIONS[6]: "stage6_smoothed_skeleton",
+    "LegScaled": "stage3_body_skeleton",
+    "Retargeted_AnalyticalIK": "stage4_scaled_skeleton",
+    "Retargeted_TrajectoryIK": "stage4_scaled_skeleton",
+    "Smoothed_AnalyticalIK": "stage5_ik_skeleton",
+    "Ground_AnalyticalIK": "stage6_smoothed_skeleton",
 }
 
 
@@ -50,9 +52,15 @@ def _as_string(value: np.ndarray) -> str:
     return str(value)
 
 
-def _load_debug_npz(path: Path) -> dict[str, np.ndarray]:
+def _load_stage_npz(path: Path) -> dict[str, np.ndarray]:
     with np.load(path, allow_pickle=False) as data:
         return {key: data[key] for key in data.files}
+
+
+def _stage_options(debug: dict[str, np.ndarray]) -> list[str]:
+    if "stage_names" not in debug:
+        return STAGE_OPTIONS
+    return [str(stage) for stage in debug["stage_names"]]
 
 
 def _segment_points(points: np.ndarray, edges: np.ndarray) -> np.ndarray:
@@ -157,19 +165,19 @@ def _format_diagnostics(debug: dict[str, np.ndarray], frame_idx: int, stage: str
             + ", ".join(f"{leg}={target_name}" for leg, target_name in zip(leg_order, target_names))
         )
 
-    if stage == STAGE_OPTIONS[4] and "stage5_target_errors" in debug:
+    if stage in {"Retargeted_AnalyticalIK", "Retargeted_TrajectoryIK"} and "stage5_target_errors" in debug:
         errors = debug["stage5_target_errors"][frame_idx]
         lines.append("IK target error: " + ", ".join(f"{float(err):.3f}m" for err in errors))
         if "hip_x_offset" in debug and "body_half_width" in debug:
             lines.append(
-                "stage5 torso points: 4 mounts + 4 HY joints "
+                "retargeted torso points: 4 mounts + 4 HY joints "
                 f"(body_half_width={float(debug['body_half_width']):.3f}m, "
                 f"hip_x_offset={float(debug['hip_x_offset']):.3f}m)"
             )
-    if stage == STAGE_OPTIONS[5] and "stage6_target_errors" in debug:
+    if stage == "Smoothed_AnalyticalIK" and "stage6_target_errors" in debug:
         errors = debug["stage6_target_errors"][frame_idx]
         lines.append("smoothed target error: " + ", ".join(f"{float(err):.3f}m" for err in errors))
-    if stage == STAGE_OPTIONS[6]:
+    if stage == "Ground_AnalyticalIK":
         postprocess_enabled = bool(debug["postprocess_global_pose"].item())
         lines.append(f"postprocess enabled: {postprocess_enabled}")
 
@@ -182,15 +190,21 @@ def _set_labels_visible(handles: list[Any], visible: bool) -> None:
 
 
 def run_viewer(
-    debug_npz: str | Path,
+    stage_npz: str | Path | None = None,
     host: str = "127.0.0.1",
     port: int = 8080,
     apply_cam_t: bool = False,
     rotate_x_deg: float = -90.0,
+    debug_npz: str | Path | None = None,
 ) -> None:
     """Run the interactive Viser stage viewer."""
-    debug_path = Path(debug_npz).expanduser().resolve()
-    debug = _load_debug_npz(debug_path)
+    if stage_npz is None:
+        stage_npz = debug_npz
+    if stage_npz is None:
+        raise ValueError("Expected a stage artifact NPZ path.")
+    stage_path = Path(stage_npz).expanduser().resolve()
+    debug = _load_stage_npz(stage_path)
+    stage_options = _stage_options(debug)
     frame_indices = debug["frame_indices"]
     n_frames = int(debug["stage1_animal3d"].shape[0])
 
@@ -290,13 +304,13 @@ def run_viewer(
     with server.gui.add_folder("Stage"):
         stage_dropdown = server.gui.add_dropdown(
             label="Output",
-            options=STAGE_OPTIONS,
-            initial_value=STAGE_OPTIONS[0],
+            options=stage_options,
+            initial_value=stage_options[0],
         )
         show_mesh = server.gui.add_checkbox(label="Mesh", initial_value=False, disabled=not has_mesh)
         show_ground = server.gui.add_checkbox(label="Sparse ground", initial_value=True)
         show_animal = server.gui.add_checkbox(label="Animal3D skeleton", initial_value=True)
-        show_spot = server.gui.add_checkbox(label="Spot/debug skeleton", initial_value=True)
+        show_spot = server.gui.add_checkbox(label="Spot/stage skeleton", initial_value=True)
         show_previous = server.gui.add_checkbox(label="Previous-stage overlay", initial_value=False)
         show_axes = server.gui.add_checkbox(label="Body axes", initial_value=True)
         show_labels = server.gui.add_checkbox(label="Labels", initial_value=False, disabled=True)
@@ -320,7 +334,7 @@ def run_viewer(
         )
         diagnostics = server.gui.add_text(
             label="Diagnostics",
-            initial_value=_format_diagnostics(debug, 0, STAGE_OPTIONS[0]),
+            initial_value=_format_diagnostics(debug, 0, stage_options[0]),
             disabled=True,
         )
 
@@ -368,7 +382,7 @@ def run_viewer(
 
     def _apply_visibility() -> None:
         stage = stage_dropdown.value
-        source_stage = stage in {STAGE_OPTIONS[0], STAGE_OPTIONS[1]}
+        source_stage = stage in {"RecoveredPose", "BodyTransformed"}
         spot_stage = stage in _STAGE_ARRAYS
 
         if mesh_handle is not None:
@@ -377,7 +391,7 @@ def run_viewer(
         animal_visible = bool(show_animal.value and source_stage)
         animal_joints_handle.visible = animal_visible
         animal_bones_handle.visible = animal_visible
-        axes_handle.visible = bool(show_axes.value and stage == STAGE_OPTIONS[1])
+        axes_handle.visible = bool(show_axes.value and stage == "BodyTransformed")
 
         spot_visible = bool(show_spot.value and spot_stage)
         spot_joints_handle.visible = spot_visible
@@ -434,7 +448,7 @@ def run_viewer(
         state["playing"] = False
 
     _update_frame(0)
-    print(f"Loaded debug stages: {debug_path}")
+    print(f"Loaded stage artifacts: {stage_path}")
     print(f"Display rotation: X={rotate_x_deg:g} degrees")
     print(f"Viser stage viewer running at http://{host}:{port}")
     print(f"SSH tunnel: ssh -L {port}:127.0.0.1:{port} <host>")

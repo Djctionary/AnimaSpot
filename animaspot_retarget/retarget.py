@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
 
 import numpy as np
-from scipy.spatial.transform import Rotation
 
 from .config import (
     HIP_ATTACHMENTS,
@@ -24,6 +24,38 @@ from .ik_solver import forward_kinematics, leg_keypoints, solve_leg_ik
 from .skeleton import compute_body_frame, compute_dog_leg_lengths, load_sequence, rotation_matrix_to_quat_xyzw
 
 LOGGER = logging.getLogger(__name__)
+
+
+METHOD_ANALYTICAL_IK = "analytical_ik"
+METHOD_TRAJECTORY_IK = "trajectory_ik"
+RETARGET_METHODS = (METHOD_ANALYTICAL_IK, METHOD_TRAJECTORY_IK)
+
+
+@dataclass
+class RetargetContext:
+    """Shared stage data consumed by retarget methods and artifact writers."""
+
+    input_dir: Path
+    sequence: np.ndarray
+    scales: Dict[str, float]
+    body_axes: np.ndarray
+    body_origins: np.ndarray
+    root_quat_raw: np.ndarray
+    scaled_targets: np.ndarray
+    fps: int
+
+
+@dataclass
+class RetargetRun:
+    """Complete output of one retarget method execution."""
+
+    method_name: str
+    context: RetargetContext
+    raw_joint_angles: np.ndarray
+    smoothed_joint_angles: np.ndarray
+    root_pos_stage6: np.ndarray
+    root_quat_stage6: np.ndarray
+    result: Dict[str, np.ndarray]
 
 
 def _apply_joint_test_overrides(joint_angles: np.ndarray, config: RetargetConfig) -> np.ndarray:
@@ -208,65 +240,6 @@ def _compute_paw_body_positions(joint_angles_frame: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Legacy ground-contact height + orientation adjustment
-# ---------------------------------------------------------------------------
-
-def _apply_ground_contact(
-    joint_angles: np.ndarray,
-    root_quat: np.ndarray,
-    root_pos: np.ndarray,
-    clearance: float,
-    freq: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Level the paw plane to horizontal and set body height.
-
-    For each frame:
-      1. FK → 4 paw positions in body frame.
-      2. Rotate to world via current root_quat.
-      3. Least-squares plane fit → surface normal.
-      4. Rodrigues minimum rotation to align the normal with world-Z.
-         This corrects pitch/roll while preserving yaw.
-      5. Re-compute paw world-Z, set root_pos.z so lowest paw = clearance.
-
-    Joint angles are never modified.
-    """
-    n_frames = joint_angles.shape[0]
-    up = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-
-    for f in range(n_frames):
-        paw_body = _compute_paw_body_positions(joint_angles[f])
-
-        R = Rotation.from_quat(root_quat[f]).as_matrix()
-        paw_rot = (R @ paw_body.T).T  # (4, 3) in world, before translation
-
-        # Least-squares plane fit: z = a*x + b*y + c
-        A = np.column_stack([paw_rot[:, 0], paw_rot[:, 1], np.ones(4)])
-        coeffs = np.linalg.lstsq(A, paw_rot[:, 2], rcond=None)[0]
-        a, b, _ = coeffs
-
-        # Plane normal (pointing upward from the paw plane).
-        n_world = np.array([-a, -b, 1.0], dtype=np.float64)
-        n_world /= np.linalg.norm(n_world)
-
-        # Minimum rotation to level the plane (pitch/roll only, yaw preserved).
-        R_corr = _rotation_between(n_world, up)
-        R_new = R_corr @ R
-        root_quat[f] = Rotation.from_matrix(R_new).as_quat()
-
-        # Height: lowest paw sits at *clearance*.
-        paw_rot_new = (R_new @ paw_body.T).T
-        min_z = np.min(paw_rot_new[:, 2])
-        root_pos[f, 2] = clearance - min_z
-
-    # Smooth the height trajectory to avoid per-frame jumps.
-    root_pos[:, 2:3] = one_euro_filter(root_pos[:, 2:3], freq, min_cutoff=0.8, beta=0.005)
-    # Ensure quaternion continuity after per-frame corrections.
-    root_quat = _normalize_quat(_enforce_quat_continuity(root_quat))
-
-    return root_pos, root_quat
-
-
-# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 
@@ -312,69 +285,164 @@ def validate_link_length_invariance(joint_angles: np.ndarray, tol: float = 1e-4)
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def retarget_sequence(input_dir: str | Path, config: RetargetConfig) -> Dict[str, np.ndarray]:
-    """Run full retargeting and return arrays for export."""
-    sequence = load_sequence(input_dir)
+
+def prepare_retarget_context(input_dir: str | Path, config: RetargetConfig) -> RetargetContext:
+    """Run shared preprocessing stages used by every retarget method."""
+    input_path = Path(input_dir)
+    sequence = load_sequence(input_path)
     n_frames = sequence.shape[0]
     scales = compute_leg_scale_factors(sequence)
 
-    joint_angles = np.zeros((n_frames, 12), dtype=np.float64)
-    root_quat = np.zeros((n_frames, 4), dtype=np.float64)
-    root_pos = np.tile(np.array(config.root_position, dtype=np.float64), (n_frames, 1))
-    paw_targets_scaled = np.zeros((n_frames, 4, 3), dtype=np.float64)
+    body_axes = np.zeros((n_frames, 3, 3), dtype=np.float64)
+    body_origins = np.zeros((n_frames, 3), dtype=np.float64)
+    root_quat_raw = np.zeros((n_frames, 4), dtype=np.float64)
+    scaled_targets = np.zeros((n_frames, len(LEG_ORDER), 3), dtype=np.float64)
 
-    for i in range(n_frames):
-        pose = sequence[i]
-        angles, quat = solve_frame_ik(pose, scales)
-        joint_angles[i] = angles
-        root_quat[i] = quat
-
-        # Cache scaled targets for FK error diagnostics.
+    for frame_idx, pose in enumerate(sequence):
         R, t = compute_body_frame(pose)
+        body_axes[frame_idx] = R
+        body_origins[frame_idx] = t
+        root_quat_raw[frame_idx] = rotation_matrix_to_quat_xyzw(R)
         targets = compute_paw_targets_body_frame(pose, R, t)
-        for j, leg in enumerate(LEG_ORDER):
-            paw_targets_scaled[i, j] = targets[leg] * scales[leg]
+        for leg_idx, leg in enumerate(LEG_ORDER):
+            scaled_targets[frame_idx, leg_idx] = targets[leg] * scales[leg]
 
-    _apply_joint_test_overrides(joint_angles, config)
+    return RetargetContext(
+        input_dir=input_path,
+        sequence=sequence,
+        scales=scales,
+        body_axes=body_axes,
+        body_origins=body_origins,
+        root_quat_raw=root_quat_raw,
+        scaled_targets=scaled_targets,
+        fps=config.fps,
+    )
 
-    # --- Smoothing (1-Euro filter) ---
+
+def _solve_analytical_ik(context: RetargetContext, config: RetargetConfig) -> np.ndarray:
+    """Solve the AnalyticalIK retarget stage frame-by-frame."""
+    joint_angles = np.zeros((context.sequence.shape[0], 12), dtype=np.float64)
+    for frame_idx, scaled_targets in enumerate(context.scaled_targets):
+        frame_angles = np.zeros((12,), dtype=np.float64)
+        for leg_idx, leg in enumerate(LEG_ORDER):
+            target = scaled_targets[leg_idx]
+            s = 1.0 if LEG_SIDE[leg] == "left" else -1.0
+            y_out = s * target[1]
+            yz_norm = np.hypot(y_out, target[2])
+            if yz_norm < HIP_X_OFFSET - 1e-6:
+                LOGGER.warning("Leg %s target inside hip-offset radius; clamping via IK.", leg)
+            z_sag = -np.sqrt(max(yz_norm * yz_norm - HIP_X_OFFSET * HIP_X_OFFSET, 0.0))
+            reach = np.hypot(target[0], z_sag)
+            if reach > L_UPPER + L_LOWER + 1e-6:
+                LOGGER.warning("Leg %s target out of reach (%.3f m); clamping via IK.", leg, reach)
+
+            frame_angles[3 * leg_idx : 3 * leg_idx + 3] = solve_leg_ik(
+                target_pos=target,
+                hip_offset=HIP_X_OFFSET,
+                L_upper=L_UPPER,
+                L_lower=L_LOWER,
+                joint_limits=JOINT_LIMITS,
+                side=LEG_SIDE[leg],
+            )
+        joint_angles[frame_idx] = frame_angles
+    return _apply_joint_test_overrides(joint_angles, config)
+
+
+def _smooth_and_clamp_joint_angles(joint_angles: np.ndarray, config: RetargetConfig) -> np.ndarray:
+    """Apply the shared AnalyticalIK smoothing and hard joint limits."""
     freq = float(config.fps)
-    joint_angles = one_euro_filter(
-        joint_angles, freq,
-        min_cutoff=config.one_euro_min_cutoff,
-        beta=config.one_euro_beta,
-        d_cutoff=config.one_euro_d_cutoff,
-    )
-    root_quat = _smooth_quaternions(
-        root_quat, freq,
+    smoothed = one_euro_filter(
+        joint_angles,
+        freq,
         min_cutoff=config.one_euro_min_cutoff,
         beta=config.one_euro_beta,
         d_cutoff=config.one_euro_d_cutoff,
     )
 
-    # Clamp post-smoothing to enforce physical limits.
-    for j, key in enumerate(["hx", "hy", "kn"] * 4):
+    for joint_idx, key in enumerate(["hx", "hy", "kn"] * 4):
         lo, hi = JOINT_LIMITS[key]
-        joint_angles[:, j] = np.clip(joint_angles[:, j], lo, hi)
+        smoothed[:, joint_idx] = np.clip(smoothed[:, joint_idx], lo, hi)
+    return _apply_joint_test_overrides(smoothed, config)
 
-    _apply_joint_test_overrides(joint_angles, config)
+
+def run_retarget_pipeline(
+    input_dir: str | Path,
+    config: RetargetConfig,
+    method: str = METHOD_ANALYTICAL_IK,
+) -> RetargetRun:
+    """Run shared stages plus the selected retarget method."""
+    if method not in RETARGET_METHODS:
+        valid = ", ".join(RETARGET_METHODS)
+        raise ValueError(f"Unknown retarget method '{method}'. Expected one of: {valid}")
+
+    context = prepare_retarget_context(input_dir, config)
+
+    freq = float(config.fps)
+    root_quat_stage6 = _smooth_quaternions(
+        context.root_quat_raw,
+        freq,
+        min_cutoff=config.one_euro_min_cutoff,
+        beta=config.one_euro_beta,
+        d_cutoff=config.one_euro_d_cutoff,
+    )
+    root_pos_stage6 = np.tile(np.array(config.root_position, dtype=np.float64), (context.sequence.shape[0], 1))
+
+    if method == METHOD_ANALYTICAL_IK:
+        raw_joint_angles = _solve_analytical_ik(context, config)
+        smoothed_joint_angles = _smooth_and_clamp_joint_angles(raw_joint_angles, config)
+    else:
+        from .trajectory_ik import solve_trajectory_ik
+
+        analytical_init = _solve_analytical_ik(context, config)
+        raw_joint_angles = solve_trajectory_ik(
+            context,
+            config,
+            q_init=analytical_init,
+            root_quat=root_quat_stage6,
+            root_pos=root_pos_stage6,
+        )
+        smoothed_joint_angles = raw_joint_angles.copy()
 
     if config.ground_contact:
         LOGGER.warning(
-            "RetargetConfig.ground_contact is deprecated and ignored inside retarget_sequence. "
+            "RetargetConfig.ground_contact is deprecated and ignored inside the retarget pipeline. "
             "Use the independent global pose postprocess instead."
         )
 
     # --- Validation ---
-    rmse = validate_fk_rmse(joint_angles, paw_targets_scaled)
+    rmse = validate_fk_rmse(smoothed_joint_angles, context.scaled_targets)
     LOGGER.info("FK target RMSE: %.4f m", rmse)
     if rmse > 0.02:
         LOGGER.warning("FK RMSE %.4f m exceeds 2cm criterion.", rmse)
-    validate_link_length_invariance(joint_angles, tol=1e-4)
+    validate_link_length_invariance(smoothed_joint_angles, tol=1e-4)
 
-    return {
-        "joint_angles": joint_angles,
-        "root_quat": _normalize_quat(root_quat),
-        "root_pos": root_pos,
+    result = {
+        "joint_angles": smoothed_joint_angles,
+        "root_quat": _normalize_quat(root_quat_stage6),
+        "root_pos": root_pos_stage6.copy(),
         "fps": np.array(config.fps, dtype=np.int32),
     }
+
+    if config.postprocess_global_pose and method == METHOD_ANALYTICAL_IK:
+        from .postprocess import apply_global_pose_postprocess
+
+        result = apply_global_pose_postprocess(result, config)
+
+    return RetargetRun(
+        method_name=method,
+        context=context,
+        raw_joint_angles=raw_joint_angles,
+        smoothed_joint_angles=smoothed_joint_angles,
+        root_pos_stage6=root_pos_stage6,
+        root_quat_stage6=_normalize_quat(root_quat_stage6),
+        result=result,
+    )
+
+
+def retarget_sequence(
+    input_dir: str | Path,
+    config: RetargetConfig,
+    method: str = METHOD_ANALYTICAL_IK,
+) -> Dict[str, np.ndarray]:
+    """Run retargeting and return arrays for export."""
+    return run_retarget_pipeline(input_dir, config, method=method).result
