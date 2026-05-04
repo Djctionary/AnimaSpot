@@ -1,14 +1,15 @@
 # AnimaSpot Workflow
 
-This repository contains two recovery projects and one retargeting project:
+This repository contains one active recovery project and one retargeting project:
 
-- `recovery_projects/FMPose3D/`: recovers Animal3D-format 3D joint positions from video.
-- `recovery_projects/AniMer/`: recovers animal pose and shape for mesh-based visualization.
-- `animaspot_retarget/`: converts recovered 3D joints into Spot motion for CSV export and MuJoCo playback.
+- `recovery_projects/AniMer/`: recovers animal pose and shape and exports Animal3D-format `pose3D`.
+- `animaspot_retarget/`: converts recovered 3D joints into Spot motion for CSV export, NPZ export, and MuJoCo playback.
+
+`recovery_projects/FMPose3D/` is kept in the repo for reference only and is now deprecated in the integrated workflow.
 
 ## Environment Setup
 
-The workflow below was validated in a single Conda environment named `AnimaSpot` with Python 3.10.
+The workflow below was validated in a Conda environment named `AnimaSpot` with Python 3.10.
 
 ```bash
 conda create -n AnimaSpot python=3.10 -y
@@ -51,26 +52,21 @@ AnimaSpot/
 │   │       └── AI_SettleDown.mp4
 │   ├── intermediate/
 │   │   ├── animer/
+│   │   │   └── AI_PlayBow/
+│   │   │       ├── meshes/
+│   │   │       └── pose3D/
 │   │   └── fmpose3d/
-│   │       ├── AI_Greeting/
-│   │       │   ├── input_2D/
-│   │       │   ├── pose2D/
-│   │       │   ├── pose2D_on_image/
-│   │       │   └── pose3D/
-│   │       ├── AI_PlayBow/
-│   │       └── AI_SettleDown/
 │   └── final/
-│       ├── animer/
-│       │   └── AI_PlayBow/
-│       │       ├── analytical_ik/
-│       │       │   ├── AI_PlayBow_spot.csv
-│       │       │   ├── AI_PlayBow_spot.npz
-│       │       │   └── AI_PlayBow_stages.npz
-│       │       └── trajectory_ik/
-│       │           ├── AI_PlayBow_spot.csv
-│       │           ├── AI_PlayBow_spot.npz
-│       │           └── AI_PlayBow_stages.npz
-│       └── fmpose3d/
+│       └── animer/
+│           └── AI_PlayBow/
+│               ├── analytical_ik/
+│               │   ├── AI_PlayBow_spot.csv
+│               │   ├── AI_PlayBow_spot.npz
+│               │   └── AI_PlayBow_stages.npz
+│               └── trajectory_ik/
+│                   ├── AI_PlayBow_spot.csv
+│                   ├── AI_PlayBow_spot.npz
+│                   └── AI_PlayBow_stages.npz
 ├── recovery_projects/
 │   ├── AniMer/
 │   └── FMPose3D/
@@ -79,76 +75,18 @@ AnimaSpot/
 └── README.md
 ```
 
-## What Goes Where
+## Paths
 
-- Input MP4 videos:
-  `pipeline_data/input/videos/AI_Greeting.mp4`
-  `pipeline_data/input/videos/AI_PlayBow.mp4`
-  `pipeline_data/input/videos/AI_SettleDown.mp4`
-- Intermediate recovery output from `FMPose3D`:
-  `pipeline_data/intermediate/fmpose3d/<video_name>/pose3D/*_3D.npz`
-- Intermediate recovery output from `AniMer`:
-  `pipeline_data/intermediate/animer/<video_name>/`
-- Final Spot motion output:
-  `pipeline_data/final/<source>/<video_name>/<method>/<video_name>_spot.csv`
-- Final retarget archive:
-  `pipeline_data/final/<source>/<video_name>/<method>/<video_name>_spot.npz`
-- Saved stage artifact for visualization:
-  `pipeline_data/final/<source>/<video_name>/<method>/<video_name>_stages.npz`
+- Input videos: `pipeline_data/input/videos/<video_name>.mp4`
+- AniMer intermediate output: `pipeline_data/intermediate/animer/<video_name>/`
+- Retarget input: `pipeline_data/intermediate/animer/<video_name>/pose3D/*_3D.npz`
+- Final CSV: `pipeline_data/final/<source>/<video_name>/<method>/<video_name>_spot.csv`
+- Final NPZ: `pipeline_data/final/<source>/<video_name>/<method>/<video_name>_spot.npz`
+- Stage artifact: `pipeline_data/final/<source>/<video_name>/<method>/<video_name>_stages.npz`
 
-The `*_3D.npz` files from `FMPose3D` are the unsmoothed recovered 3D positions currently consumed by `animaspot_retarget`.
+## Step 1: Recover 3D Pose with AniMer
 
-## Step 1: Recover 3D Pose
-
-Step 1 has two choices:
-
-- Option A: `FMPose3D`
-- Option B: `AniMer`
-
-### Step 1A: Recover 3D Pose with FMPose3D
-
-The default `vis_animals.sh` now writes outputs to:
-
-- `pipeline_data/intermediate/fmpose3d/<video_name>/`
-
-It also reads input videos from:
-
-- `pipeline_data/input/videos/<video_name>.mp4`
-
-Run it from `recovery_projects/FMPose3D/animals/demo/`, or call the Python entry point directly:
-
-```bash
-cd recovery_projects/FMPose3D/animals/demo
-
-python vis_animals.py \
-  --type video \
-  --path ../../../../pipeline_data/input/videos/AI_PlayBow.mp4 \
-  --output_root ../../../../pipeline_data/intermediate/fmpose3d \
-  --saved_model_path ../pre_trained_models/fmpose3d_animals/fmpose3d_animals_pretrained_weights.pth \
-  --model_type fmpose3d_animals \
-  --sample_steps 3 \
-  --batch_size 1 \
-  --layers 5 \
-  --dataset animal3d \
-  --gpu 0 \
-  --sh_file vis_animals.sh \
-  --hypothesis_num 10 \
-  --aggregation rpea \
-  --topk 5 \
-  --rpea_alpha 50.0 \
-  --bone_norm True
-```
-
-The same pattern applies to:
-
-- `pipeline_data/input/videos/AI_Greeting.mp4`
-- `pipeline_data/input/videos/AI_SettleDown.mp4`
-
-### Step 1B: Recover Pose/Shape with AniMer
-
-AniMer is an alternative recovery step. Save its outputs under:
-
-- `pipeline_data/intermediate/animer/<video_name>/`
+Run AniMer from `recovery_projects/AniMer/`:
 
 ```bash
 cd recovery_projects/AniMer
@@ -163,12 +101,17 @@ python demo_video.py \
   --checkpoint data/AniMer/checkpoints/checkpoint.ckpt
 ```
 
-Step 2 now consumes the shared `pose3D/*_3D.npz` output format produced by both `FMPose3D` and `AniMer`.
+Expected output location:
 
-## Step 1.5: Visualize AniMer Meshes (Optional)
+```text
+pipeline_data/intermediate/animer/<video_name>/
+```
 
-After running AniMer, you can preview the recovered meshes in a browser before retargeting.
-Run from the `AnimaSpot/` root:
+Retargeting consumes the shared `pose3D/*_3D.npz` output format.
+
+## Step 1.5: Visualize AniMer Meshes
+
+Run from the repository root:
 
 ```bash
 python recovery_projects/AniMer/visualize_meshes.py \
@@ -176,44 +119,30 @@ python recovery_projects/AniMer/visualize_meshes.py \
   --port 8080
 ```
 
-Open `http://localhost:8080` in a browser to scrub through the mesh frames interactively.
+Open `http://localhost:8080` in a browser to scrub through the mesh frames.
 
 ## Step 2: Retarget to Spot
 
-Use either intermediate `pose3D` folder as the retargeting input:
+Retarget input:
 
-- `pipeline_data/intermediate/fmpose3d/<video_name>/pose3D`
-- `pipeline_data/intermediate/animer/<video_name>/pose3D`
+```text
+pipeline_data/intermediate/animer/<video_name>/pose3D
+```
 
-The retargeting CLI supports two methods:
+Supported methods:
 
 - `analytical_ik`: closed-form per-frame IK baseline, followed by smoothing and optional global pose grounding.
 - `trajectory_ik`: full-sequence soft-constrained optimization with end-effector tracking, temporal smoothness, ground-penetration penalty, and joint-stability penalty.
 
-If you omit `--output` and `--output_npz`, outputs are saved under method-specific folders:
+If you omit `--output` and `--output_npz`, outputs are written to:
 
-- `pipeline_data/final/fmpose3d/<video_name>/<method>/<video_name>_spot.csv`
-- `pipeline_data/final/fmpose3d/<video_name>/<method>/<video_name>_spot.npz`
-- `pipeline_data/final/fmpose3d/<video_name>/<method>/<video_name>_stages.npz`
-- `pipeline_data/final/animer/<video_name>/<method>/<video_name>_spot.csv`
-- `pipeline_data/final/animer/<video_name>/<method>/<video_name>_spot.npz`
-- `pipeline_data/final/animer/<video_name>/<method>/<video_name>_stages.npz`
-
-Stage artifacts are saved by default on every run. Passing `--visualize` does not trigger a separate retarget pass; it only opens the Viser viewer from the already-saved `*_stages.npz`.
-
-### AnalyticalIK Baseline
-
-Run the default baseline on an `FMPose3D` result:
-
-```bash
-python3 -m animaspot_retarget.main \
-  --input_dir ./pipeline_data/intermediate/fmpose3d/AI_PlayBow/pose3D \
-  --behavior AI_PlayBow \
-  --method analytical_ik \
-  --visualize
+```text
+pipeline_data/final/animer/<video_name>/<method>/<video_name>_spot.csv
+pipeline_data/final/animer/<video_name>/<method>/<video_name>_spot.npz
+pipeline_data/final/animer/<video_name>/<method>/<video_name>_stages.npz
 ```
 
-Or retarget an `AniMer` result:
+### Step 2A: Run AnalyticalIK
 
 ```bash
 python3 -m animaspot_retarget.main \
@@ -223,17 +152,7 @@ python3 -m animaspot_retarget.main \
   --visualize
 ```
 
-`AnalyticalIK` uses recovered paw targets for all four legs, after leg-length scaling. By default, its export applies an independent global pose postprocess that:
-
-- rotates each frame so the four-foot support plane is as horizontal as possible
-- keeps the retargeted joint angles unchanged
-- shifts each frame vertically so the support plane stays close to ground level
-
-If you want the raw retarget root pose without this correction, add `--no_postprocess_global_pose`.
-
-### TrajectoryIK Optimization
-
-Run the trajectory-level method on an `AniMer` result:
+### Step 2B: Run TrajectoryIK
 
 ```bash
 python3 -m animaspot_retarget.main \
@@ -243,68 +162,22 @@ python3 -m animaspot_retarget.main \
   --visualize
 ```
 
-`TrajectoryIK` optimizes the full sequence at once with `scipy.optimize.minimize(method="L-BFGS-B")`. The decision variable is the full joint trajectory `q` with shape `(T, 12)`. Root pose is not optimized; it is inherited from the shared body-frame extraction stage.
-
-
-Its objective has four conceptual terms:
-
-```text
-E(q) =
-  w_track  * E_track(q)
-+ w_smooth * E_smooth(q)
-+ w_ground * E_ground(q)
-+ w_stable * E_stable(q)
-```
-
-`E_smooth` contains both velocity and acceleration penalties:
-
-```text
-E_smooth(q) = alpha_vel * sum(||q[t+1] - q[t]||^2)
-            + alpha_acc * sum(||q[t+2] - 2q[t+1] + q[t]||^2)
-```
-
-Useful `TrajectoryIK` options:
+### Step 2C: Useful TrajectoryIK Options
 
 ```bash
---trajectory_w_track 1.0 \
---trajectory_w_smooth 0.05 \
---trajectory_w_ground 5.0 \
---trajectory_w_stable 0.02 \
---trajectory_maxiter 80 \
---trajectory_stable_joints hx
+python3 -m animaspot_retarget.main \
+  --input_dir ./pipeline_data/intermediate/animer/AI_PlayBow/pose3D \
+  --behavior AI_PlayBow \
+  --method trajectory_ik \
+  --trajectory_w_track 1.0 \
+  --trajectory_w_smooth 0.05 \
+  --trajectory_w_ground 5.0 \
+  --trajectory_w_stable 0.02 \
+  --trajectory_maxiter 80 \
+  --trajectory_stable_joints hx
 ```
 
-`--trajectory_stable_joints` accepts joint groups (`hx`, `hy`, `kn`), explicit Spot joint names such as `fl_hx`, or numeric joint indices. The optimizer displays a `tqdm` progress bar over L-BFGS-B iterations.
-
-`TrajectoryIK` currently saves a single method stage, `Retargeted_TrajectoryIK`; it does not create a separate `Ground_TrajectoryIK` stage.
-
-### Retarget Pipeline Stages
-
-Both retarget methods share the same preprocessing:
-
-```text
-RecoveredPose
-  -> BodyTransformed
-  -> LegScaled
-```
-
-`AnalyticalIK` then saves:
-
-```text
-Retargeted_AnalyticalIK
-  -> Smoothed_AnalyticalIK
-  -> Ground_AnalyticalIK
-```
-
-`TrajectoryIK` then saves:
-
-```text
-Retargeted_TrajectoryIK
-```
-
-The Viser stage viewer reads only the saved `*_stages.npz` artifact. It does not run IK, leg scaling, smoothing, grounding, or any other retarget computation.
-
-You can also open a saved stage artifact directly:
+### Step 2D: Open a Saved Stage Artifact
 
 ```bash
 python3 visualize_retarget_stages.py \
@@ -322,12 +195,96 @@ python3 visualize_spot_csv_mujoco.py \
   --repeat
 ```
 
-## Notes
+## Retarget Notes
 
-- `pipeline_data/input/videos/` is now the only input-video location used by the integrated workflow.
-- `vis_animals.py` now supports `--output_root` so recovery outputs no longer have to stay under `animals/demo/predictions/`.
-- Saved `FMPose3D` intermediate `pose3D` results are post-processed before export (multi-hypothesis aggregation, bone-length normalization, limb regularization), while saved `AniMer` `pose3D` results are written without extra temporal smoothing in `demo_video.py`.
-- `animaspot_retarget.main` now infers default CSV/NPZ/stage-artifact save paths from the intermediate input folder and selected method, and creates parent directories automatically.
-- `--visualize` only opens the Viser viewer from the saved stage artifact; stage artifacts are saved by default for every retarget run.
-- `analytical_ik` and `trajectory_ik` write to separate method folders to avoid output conflicts.
+### Root Pose Behavior
+
+- `TrajectoryIK` does not optimize root pose. It optimizes only the 12 Spot joint angles.
+- `root_position` is configured in `animaspot_retarget/config.py`.
+- `root_quaternion` can now also be set manually in `animaspot_retarget/config.py`.
+- When `root_quaternion` is provided, the retarget pipeline uses that quaternion for the entire exported sequence instead of the source-derived root quaternion sequence.
+- For `trajectory_ik`, the same final `root_pos/root_quat` is used by ground-penetration evaluation, export, and `World_TrajectoryIK` visualization.
+
+### Global Pose Postprocess
+
+- `AnalyticalIK` applies an independent global pose postprocess by default.
+- That postprocess rotates each frame so the four-foot support plane is as horizontal as possible.
+- It keeps the retargeted joint angles unchanged.
+- It shifts each frame vertically so the support plane stays close to ground level.
+- Disable it with `--no_postprocess_global_pose` if you want the raw retarget root pose.
+
+### TrajectoryIK Objective
+
+`TrajectoryIK` optimizes the full sequence with `scipy.optimize.minimize(method="L-BFGS-B")`.
+The decision variable is the full joint trajectory `q` with shape `(T, 12)`.
+
+```text
+E(q) =
+  w_track  * E_track(q)
++ w_smooth * E_smooth(q)
++ w_ground * E_ground(q)
++ w_stable * E_stable(q)
+```
+
+```text
+E_smooth(q) = alpha_vel * sum(||q[t+1] - q[t]||^2)
+            + alpha_acc * sum(||q[t+2] - 2q[t+1] + q[t]||^2)
+```
+
+- `--trajectory_stable_joints` accepts joint groups `hx`, `hy`, `kn`, explicit Spot joint names such as `fl_hx`, or numeric joint indices.
+- The optimizer displays a `tqdm` progress bar over L-BFGS-B iterations.
+
+### Saved Stage Layout
+
+Shared preprocessing stages:
+
+```text
+RecoveredPose
+  -> BodyTransformed
+  -> LegScaled
+```
+
+AnalyticalIK stages:
+
+```text
+Retargeted_AnalyticalIK
+  -> Smoothed_AnalyticalIK
+  -> Ground_AnalyticalIK
+```
+
+TrajectoryIK stages:
+
+```text
+Retargeted_TrajectoryIK
+  -> World_TrajectoryIK
+```
+
+The Viser stage viewer reads the saved `*_stages.npz` artifact only. It does not rerun IK, smoothing, grounding, or any other retarget computation.
+
+### Default Metrics
+
+Every `python3 -m animaspot_retarget.main ...` retarget run now computes and prints:
+
+- `Scale-aligned MPJPE`
+- `Joint Jump Rate`
+- `Ground Penetration Rate`
+
+Metric definitions:
+
+- `Scale-aligned MPJPE`: compares retarget input and retarget output in root-relative/body-relative coordinates using 12 leg landmarks after per-leg morphology scaling.
+- `Joint Jump Rate`: measures how often any Spot joint changes more than the configured threshold between adjacent frames.
+- `Ground Penetration Rate`: measures how often any paw falls below the configured ground plane in the final world-frame trajectory.
+
+Related config defaults live in `animaspot_retarget/config.py`:
+
+- `metrics_joint_jump_threshold = 0.5`
+- `metrics_ground_level = 0.0`
+
+## Deprecation Notes
+
+- `FMPose3D` is deprecated in the integrated workflow and no longer has recommended command examples in this README.
+- `pipeline_data/input/videos/` is the only input-video location used by the documented workflow.
+- `animaspot_retarget.main` infers default CSV, NPZ, and stage-artifact save paths from the intermediate input folder and selected method.
+- `--visualize` opens the Viser viewer from the saved stage artifact and does not trigger a second retarget pass.
+- `analytical_ik` and `trajectory_ik` write to separate method folders.
 - Spot MuJoCo assets live under `urdf/isaacsim_spot/`.

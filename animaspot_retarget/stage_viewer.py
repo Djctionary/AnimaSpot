@@ -26,6 +26,7 @@ STAGE_OPTIONS = [
     "Smoothed_AnalyticalIK",
     "Ground_AnalyticalIK",
     "Retargeted_TrajectoryIK",
+    "World_TrajectoryIK",
 ]
 
 _STAGE_ARRAYS = {
@@ -35,6 +36,7 @@ _STAGE_ARRAYS = {
     "Retargeted_TrajectoryIK": "stage5_ik_skeleton",
     "Smoothed_AnalyticalIK": "stage6_smoothed_skeleton",
     "Ground_AnalyticalIK": "stage7_postprocessed_skeleton",
+    "World_TrajectoryIK": "stage7_postprocessed_skeleton",
 }
 
 _PREVIOUS_STAGE_ARRAYS = {
@@ -43,6 +45,7 @@ _PREVIOUS_STAGE_ARRAYS = {
     "Retargeted_TrajectoryIK": "stage4_scaled_skeleton",
     "Smoothed_AnalyticalIK": "stage5_ik_skeleton",
     "Ground_AnalyticalIK": "stage6_smoothed_skeleton",
+    "World_TrajectoryIK": "stage5_ik_skeleton",
 }
 
 

@@ -385,6 +385,13 @@ def run_retarget_pipeline(
         beta=config.one_euro_beta,
         d_cutoff=config.one_euro_d_cutoff,
     )
+    if config.root_quaternion is not None:
+        manual_root_quat = _normalize_quat(np.asarray(config.root_quaternion, dtype=np.float64))
+        if manual_root_quat.shape != (4,):
+            raise ValueError(
+                f"Expected config.root_quaternion shape (4,), got {manual_root_quat.shape}"
+            )
+        root_quat_stage6 = np.tile(manual_root_quat, (context.sequence.shape[0], 1))
     root_pos_stage6 = np.tile(np.array(config.root_position, dtype=np.float64), (context.sequence.shape[0], 1))
 
     if method == METHOD_ANALYTICAL_IK:

@@ -226,6 +226,7 @@ def build_stage_artifacts(run: RetargetRun, config: RetargetConfig) -> dict[str,
                 "BodyTransformed",
                 "LegScaled",
                 "Retargeted_TrajectoryIK",
+                "World_TrajectoryIK",
             ],
             dtype="<U32",
         )

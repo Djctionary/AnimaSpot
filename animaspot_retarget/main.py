@@ -10,6 +10,7 @@ try:
     from .config import SPOT_JOINT_NAMES, RetargetConfig
     from .debug_stages import default_stage_artifact_path, save_stage_artifacts
     from .export import to_csv, to_numpy
+    from .metrics import compute_retarget_metrics
     from .retarget import METHOD_ANALYTICAL_IK, RETARGET_METHODS, run_retarget_pipeline
     from .skeleton import load_sequence
     from .visualize import animate_sequence
@@ -17,6 +18,7 @@ except ImportError:  # Support direct script execution: python main.py ...
     from animaspot_retarget.config import SPOT_JOINT_NAMES, RetargetConfig
     from animaspot_retarget.debug_stages import default_stage_artifact_path, save_stage_artifacts
     from animaspot_retarget.export import to_csv, to_numpy
+    from animaspot_retarget.metrics import compute_retarget_metrics
     from animaspot_retarget.retarget import METHOD_ANALYTICAL_IK, RETARGET_METHODS, run_retarget_pipeline
     from animaspot_retarget.skeleton import load_sequence
     from animaspot_retarget.visualize import animate_sequence
@@ -222,6 +224,7 @@ def main() -> None:
         )
     run = run_retarget_pipeline(input_dir, cfg, method=args.method)
     result = run.result
+    metrics = compute_retarget_metrics(run, cfg)
 
     to_csv(result, out_csv)
     print(f"Wrote CSV: {out_csv}")
@@ -230,6 +233,14 @@ def main() -> None:
     stage_path = default_stage_artifact_path(out_npz)
     save_stage_artifacts(run, stage_path, cfg)
     print(f"Wrote stage artifacts: {stage_path}")
+    print(
+        "Metrics: "
+        f"Scale-aligned MPJPE={metrics.scale_aligned_mpjpe:.4f} m, "
+        f"Joint Jump Rate={metrics.joint_jump_rate:.4%} "
+        f"(threshold={metrics.joint_jump_threshold:.3f} rad), "
+        f"Ground Penetration Rate={metrics.ground_penetration_rate:.4%} "
+        f"(ground={metrics.ground_level:.3f} m)"
+    )
     print("Reminder for downstream preprocessing: use --input_fps 24")
 
     if args.visualize:
