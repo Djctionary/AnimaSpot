@@ -397,11 +397,13 @@ def run_retarget_pipeline(
     if method == METHOD_ANALYTICAL_IK:
         raw_joint_angles = _solve_analytical_ik(context, config)
         smoothed_joint_angles = _smooth_and_clamp_joint_angles(raw_joint_angles, config)
+        root_pos_result = root_pos_stage6.copy()
+        root_quat_result = _normalize_quat(_enforce_quat_continuity(root_quat_stage6))
     else:
         from .trajectory_ik import solve_trajectory_ik
 
         analytical_init = _solve_analytical_ik(context, config)
-        raw_joint_angles = solve_trajectory_ik(
+        raw_joint_angles, root_pos_result, root_quat_result = solve_trajectory_ik(
             context,
             config,
             q_init=analytical_init,
@@ -409,6 +411,7 @@ def run_retarget_pipeline(
             root_pos=root_pos_stage6,
         )
         smoothed_joint_angles = raw_joint_angles.copy()
+        root_quat_result = _normalize_quat(_enforce_quat_continuity(root_quat_result))
 
     if config.ground_contact:
         LOGGER.warning(
@@ -425,8 +428,8 @@ def run_retarget_pipeline(
 
     result = {
         "joint_angles": smoothed_joint_angles,
-        "root_quat": _normalize_quat(root_quat_stage6),
-        "root_pos": root_pos_stage6.copy(),
+        "root_quat": root_quat_result,
+        "root_pos": root_pos_result,
         "fps": np.array(config.fps, dtype=np.int32),
     }
 

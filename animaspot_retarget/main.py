@@ -69,8 +69,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trajectory_w_track", type=float, default=1.0, help="TrajectoryIK tracking weight.")
     parser.add_argument("--trajectory_w_smooth", type=float, default=0.05, help="TrajectoryIK smoothness weight.")
     parser.add_argument("--trajectory_w_ground", type=float, default=5.0, help="TrajectoryIK ground penetration weight.")
-    parser.add_argument("--trajectory_w_stable", type=float, default=0.02, help="TrajectoryIK joint stability weight.")
+    parser.add_argument("--trajectory_w_stable", type=float, default=0.02, help="TrajectoryIK zero-position joint stability weight.")
     parser.add_argument("--trajectory_maxiter", type=int, default=80, help="TrajectoryIK L-BFGS-B max iterations.")
+    parser.add_argument("--trajectory_maxfun", type=int, default=50000, help="TrajectoryIK L-BFGS-B max function evaluations.")
     parser.add_argument(
         "--trajectory_stable_joints",
         type=str,
@@ -215,6 +216,7 @@ def main() -> None:
         trajectory_w_ground=args.trajectory_w_ground,
         trajectory_w_stable=args.trajectory_w_stable,
         trajectory_maxiter=args.trajectory_maxiter,
+        trajectory_maxfun=args.trajectory_maxfun,
         trajectory_stable_joint_indices=parse_stable_joint_indices(args.trajectory_stable_joints),
     )
     if args.ground_contact:

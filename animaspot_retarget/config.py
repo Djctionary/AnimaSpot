@@ -176,7 +176,7 @@ class RetargetConfig:
     """Runtime pipeline parameters."""
 
     fps: int = 24
-    root_position: Tuple[float, float, float] = (0.0, 0.0, 0.55)
+    root_position: Tuple[float, float, float] = (0.0, 0.0, 0.45)
     root_quaternion: Tuple[float, float, float, float] | None = (0.0, 0.0, 0.0, 1.0)
     # 1-Euro filter (Casiez et al. 2012) — adaptive low-pass.
     one_euro_min_cutoff: float = 1.7
@@ -195,10 +195,13 @@ class RetargetConfig:
     trajectory_w_smooth: float = 0.05
     trajectory_smooth_velocity_weight: float = 0.2
     trajectory_smooth_acceleration_weight: float = 1.0
+    trajectory_smooth_root_pos_weight: float = 1.0
+    trajectory_smooth_root_rot_weight: float = 0.25
     trajectory_w_ground: float = 5.0
     trajectory_w_stable: float = 0.02
     trajectory_ground_level: float = 0.0
     trajectory_maxiter: int = 80
+    trajectory_maxfun: int = 50000
     trajectory_ftol: float = 1e-6
     trajectory_stable_joint_indices: Tuple[int, ...] = (0, 3, 6, 9)
     metrics_joint_jump_threshold: float = 0.5

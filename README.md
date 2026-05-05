@@ -174,6 +174,7 @@ python3 -m animaspot_retarget.main \
   --trajectory_w_ground 5.0 \
   --trajectory_w_stable 0.02 \
   --trajectory_maxiter 80 \
+  --trajectory_maxfun 500000 \
   --trajectory_stable_joints hx
 ```
 
@@ -216,13 +217,14 @@ python3 visualize_spot_csv_mujoco.py \
 ### TrajectoryIK Objective
 
 `TrajectoryIK` optimizes the full sequence with `scipy.optimize.minimize(method="L-BFGS-B")`.
-The decision variable is the full joint trajectory `q` with shape `(T, 12)`.
+The decision variables are the full joint trajectory `q` with shape `(T, 12)`,
+root position with shape `(T, 3)`, and root rotation vector with shape `(T, 3)`.
 
 ```text
-E(q) =
+E(q, root) =
   w_track  * E_track(q)
-+ w_smooth * E_smooth(q)
-+ w_ground * E_ground(q)
++ w_smooth * E_smooth(q, root)
++ w_ground * E_ground(q, root)
 + w_stable * E_stable(q)
 ```
 
@@ -231,6 +233,8 @@ E_smooth(q) = alpha_vel * sum(||q[t+1] - q[t]||^2)
             + alpha_acc * sum(||q[t+2] - 2q[t+1] + q[t]||^2)
 ```
 
+- `E_smooth(q)` also includes weighted root position and root rotation-vector velocity/acceleration terms.
+- `E_stable(q)` penalizes the selected stable joints' absolute angles relative to zero, summed over the full trajectory.
 - `--trajectory_stable_joints` accepts joint groups `hx`, `hy`, `kn`, explicit Spot joint names such as `fl_hx`, or numeric joint indices.
 - The optimizer displays a `tqdm` progress bar over L-BFGS-B iterations.
 
