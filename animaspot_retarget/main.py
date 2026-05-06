@@ -73,6 +73,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trajectory_maxiter", type=int, default=80, help="TrajectoryIK L-BFGS-B max iterations.")
     parser.add_argument("--trajectory_maxfun", type=int, default=50000, help="TrajectoryIK L-BFGS-B max function evaluations.")
     parser.add_argument(
+        "--no_trajectory_autograd_jac",
+        dest="trajectory_use_autograd_jac",
+        action="store_false",
+        default=True,
+        help="Disable the PyTorch autograd Jacobian and use SciPy finite-difference gradients.",
+    )
+    parser.add_argument(
+        "--trajectory_autograd_device",
+        type=str,
+        default="cpu",
+        choices=("auto", "cpu", "cuda"),
+        help="Device for the PyTorch autograd Jacobian when enabled.",
+    )
+    parser.add_argument(
         "--trajectory_stable_joints",
         type=str,
         default="hx",
@@ -217,6 +231,8 @@ def main() -> None:
         trajectory_w_stable=args.trajectory_w_stable,
         trajectory_maxiter=args.trajectory_maxiter,
         trajectory_maxfun=args.trajectory_maxfun,
+        trajectory_use_autograd_jac=args.trajectory_use_autograd_jac,
+        trajectory_autograd_device=args.trajectory_autograd_device,
         trajectory_stable_joint_indices=parse_stable_joint_indices(args.trajectory_stable_joints),
     )
     if args.ground_contact:

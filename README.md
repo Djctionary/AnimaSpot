@@ -172,9 +172,10 @@ python3 -m animaspot_retarget.main \
   --trajectory_w_track 1.0 \
   --trajectory_w_smooth 0.05 \
   --trajectory_w_ground 5.0 \
-  --trajectory_w_stable 0.02 \
+  --trajectory_w_stable 2 \
   --trajectory_maxiter 80 \
   --trajectory_maxfun 500000 \
+  --trajectory_autograd_device cpu \
   --trajectory_stable_joints hx
 ```
 
@@ -200,10 +201,10 @@ python3 visualize_spot_csv_mujoco.py \
 
 ### Root Pose Behavior
 
-- `TrajectoryIK` does not optimize root pose. It optimizes only the 12 Spot joint angles.
-- `root_position` is configured in `animaspot_retarget/config.py`.
+- `TrajectoryIK` optimizes both the 12 Spot joint angles and the root pose over the full sequence.
+- `root_position` in `animaspot_retarget/config.py` is the initial root position for `TrajectoryIK`.
 - `root_quaternion` can now also be set manually in `animaspot_retarget/config.py`.
-- When `root_quaternion` is provided, the retarget pipeline uses that quaternion for the entire exported sequence instead of the source-derived root quaternion sequence.
+- When `root_quaternion` is provided, the retarget pipeline uses that quaternion as the initial root rotation for the entire exported sequence instead of the source-derived root quaternion sequence.
 - For `trajectory_ik`, the same final `root_pos/root_quat` is used by ground-penetration evaluation, export, and `World_TrajectoryIK` visualization.
 
 ### Global Pose Postprocess
@@ -237,6 +238,9 @@ E_smooth(q) = alpha_vel * sum(||q[t+1] - q[t]||^2)
 - `E_stable(q)` penalizes the selected stable joints' absolute angles relative to zero, summed over the full trajectory.
 - `--trajectory_stable_joints` accepts joint groups `hx`, `hy`, `kn`, explicit Spot joint names such as `fl_hx`, or numeric joint indices.
 - The optimizer displays a `tqdm` progress bar over L-BFGS-B iterations.
+- By default, `TrajectoryIK` uses a PyTorch autograd Jacobian and passes it to SciPy L-BFGS-B. This avoids SciPy finite-difference gradients over the `18 * T` optimization variables (`12 * T` joints, `3 * T` root positions, and `3 * T` root rotation-vector values).
+- `--trajectory_autograd_device` accepts `cpu`, `cuda`, or `auto`. The default is `cpu`, which avoids repeated SciPy/Numpy-to-GPU transfer overhead on medium-length clips. `auto` uses CUDA when PyTorch reports it is available, otherwise CPU.
+- Disable the autograd Jacobian with `--no_trajectory_autograd_jac` to fall back to SciPy finite-difference gradients for debugging or comparison. Finite differences are much slower on medium-length clips because each optimizer iteration can require thousands of objective evaluations.
 
 ### Saved Stage Layout
 
